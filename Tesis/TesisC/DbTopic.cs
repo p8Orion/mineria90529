@@ -16,15 +16,22 @@ namespace TesisC
     {
         public String DbName { get; set; }
         public String Id { get; set; }
-        public List<String> TweetsAbout { get; private set; } // ids
+        public List<long> TweetsAbout { get; private set; } // ids
         public List<String> Alias { get; private set;  }
+        public List<String> Except { get; private set; }
 
-        public DbTopic(String dbName, String id, List<String> alias)
+        public DbTopic(String dbName, String id, List<String> alias, List<String> except)
         {
             this.DbName = dbName;
             this.Id = id;
             this.Alias = alias;
-            this.TweetsAbout = new List<String>();
+            
+            if (except == null) 
+                this.Except = new List<String>();
+            else 
+                this.Except = except;
+
+            this.TweetsAbout = new List<long>();
         }
 
         public DbTopic(String dbName, String id, String alias)
@@ -33,7 +40,7 @@ namespace TesisC
             this.Id = id;
             this.Alias = new List<String>();
             this.Alias.Add(alias);
-            this.TweetsAbout = new List<String>();
+            this.TweetsAbout = new List<long>();
         }
 
         // Co-ocurrencia, etc.
