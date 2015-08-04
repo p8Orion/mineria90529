@@ -12,7 +12,8 @@ namespace TesisC
         public int NegVal { get; private set; }
         public float Ambiguity { get; private set; }
         public int Popularity { get; private set; }
-        public Dictionary<String, double> RelevantTerms { get; private set; }
+        //public Dictionary<String, double> RelevantTerms { get; private set; }
+        public List<KeyValuePair<String, double>> relevantList { get; private set; }
 
         public AnalysisResults(int posVal, int negVal, float ambiguity, int popularity, Dictionary<String, double> relevantTerms)
         {
@@ -20,19 +21,18 @@ namespace TesisC
             this.NegVal = negVal;
             this.Ambiguity = ambiguity;
             this.Popularity = popularity;
-            this.RelevantTerms = relevantTerms;
+            //this.RelevantTerms = relevantTerms;
+            relevantList = relevantTerms.ToList();
+
+            relevantList.Sort((firstPair, nextPair) =>
+            {
+                return -firstPair.Value.CompareTo(nextPair.Value);
+            }
+            );
         }
 
         public void Display()
         {
-            List<KeyValuePair<String, double>> relevantList = RelevantTerms.ToList();
-
-            relevantList.Sort((firstPair, nextPair) =>
-                {
-                    return -firstPair.Value.CompareTo(nextPair.Value);
-                }
-            );
-
             Console.Out.WriteLine(PosVal + "/" + NegVal + ", amb: " + Ambiguity + ", pop: " + Popularity);
             Console.Out.WriteLine("Relevant terms: ");
 

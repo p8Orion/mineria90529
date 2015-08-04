@@ -40,8 +40,25 @@ namespace TesisC
 
             Console.Out.WriteLine("\nTermFreq:\n");
             foreach(var item in TermFreq) {
-                Console.Out.WriteLine(item.Key + ": " + item.Value);
+                Console.Out.Write(item.Key + ": " + item.Value + ", ");
             }
+        }
+
+
+        public AnalysisResults AnalyzeTweetSetLite(IEnumerable<DbTweet> tws)
+        {
+            int posVal = 0;
+            int negVal = 0;
+            int popularity = 0;
+
+            foreach (DbTweet tw in tws)
+            {
+                posVal += tw.PosValue * tw.Weight;
+                negVal += tw.NegValue * tw.Weight;
+                popularity += tw.Weight;
+            }
+
+            return new AnalysisResults(posVal, negVal, 0, popularity, new Dictionary<String,double>());
         }
 
         public AnalysisResults AnalyzeTweetSet(IEnumerable<DbTweet> tws)
@@ -92,46 +109,56 @@ namespace TesisC
                 {
                     Console.Out.WriteLine(e.Message);
                 }
-            }
-            
+            }          
 
             return new AnalysisResults(posVal, negVal, ambiguity, popularity, relevantTerms);
         }
 
         public void ProcessTweet(DbTweet tw)
         {
-            cantTweets++;
-
-            String[] words = tw.Text.Split(new char[] { ' ', '.', ',', '?', '!', '¿', '¡', ';', ':', '-', '\n', '(', ')', '"', '\'', '[', ']', '+' }, StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (String w in words)
+            try
             {
-                if (w.Contains('/')) continue; // Ignoro urls
-                if (w.Length == 1) continue;
-                if (w.Contains('@')) continue; // ToDo: chequear si se refiere a un followed
+                String[] words = tw.Text.Split(new char[] { ' ', '.', ',', '?', '!', '¿', '¡', ';', ':', '-', '\n', '(', ')', '"', '\'', '[', ']', '+', '|', '“', '”', '…'}, StringSplitOptions.RemoveEmptyEntries);
 
-                IEnumerable<int> res = from DbWord x in db
-                                       where x.Name.Equals(w.ToLower())
-                                       select x.Value;
-
-                if (res.Count() != 0 && res.First() == 0) // Stopword
+                foreach (String w in words)
                 {
-                }
-                else {
-                    if (res.Count() != 0) {
-                        if (res.First() == 1) tw.PosValue++; // Palabra positiva
-                        if (res.First() == -1) tw.NegValue++; // Palabra negativa
-                    }
-                    // Término
-                    if (!tw.Terms.Contains(w.ToLower()))
-                        tw.Terms.Add(w.ToLower());
+                    if (w.Contains('/')) continue; // Ignoro urls
+                    if (w.Length == 1) continue;
+                    //if (w.Contains('@'))
 
-                    if (TermFreq.ContainsKey(w.ToLower())) TermFreq[w.ToLower()]++;
-                    else TermFreq[w.ToLower()] = 1;
+
+                    IEnumerable<int> res = from DbWord x in db
+                                           where x.Name.Equals(w.ToLower())
+                                           select x.Value;
+
+                    if (res.Count() > 0 && res.First() == 0) // Stopword
+                    {
+                    }
+                    else
+                    {
+                        if (res.Count() != 0)
+                        {
+                            if (res.First() == 1) tw.PosValue++; // Palabra positiva
+                            if (res.First() == -1) tw.NegValue++; // Palabra negativa
+                        }
+                        // Término
+                        if (!tw.Terms.Contains(w.ToLower()))
+                            tw.Terms.Add(w.ToLower());
+
+                        if (TermFreq.ContainsKey(w.ToLower())) TermFreq[w.ToLower()]++;
+                        else TermFreq[w.ToLower()] = 1;
+                    }
                 }
+
+                db.Store(tw);
+            }
+            catch (Exception e)
+            {
+                Console.Out.WriteLine("ProcessTweet: Error analizando tweet.");
+                Console.Out.WriteLine(e.Message);
             }
 
-            db.Store(tw);
+            cantTweets++;
         }
 
     }
