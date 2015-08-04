@@ -13,12 +13,14 @@ using Db4objects.Db4o.Config;
 using Db4objects.Db4o.Linq;
 using Tweetinvi.Core.Parameters;
 
-
-
 namespace TesisC
 {
-    class Program
+    public class Program
     {
+        public const int DOMAIN_ABSTRACTO = 0;
+        public const int DOMAIN_NACION = 1;
+        public const int DOMAIN_PROVINCIA = 2;
+
         // Base de datos
         private String dbName = "polArg";
         private IObjectContainer db;
@@ -26,7 +28,9 @@ namespace TesisC
         private IFilteredStream myStream;
 
         private int cantTweets;
-        private int maxCantTweets = 10;
+        private int maxCantTweets = 5;
+
+        private TweetAnalyzer TA;
 
         public Program()
         {
@@ -39,49 +43,52 @@ namespace TesisC
 
             InitWords();
 
+            TA = new TweetAnalyzer(db);
+
+
             Console.Out.WriteLine("Tweets test");
             TwitterCredentials.SetCredentials("208552577-ugHwpVaQGNlPHOq3l5W9jKdHR31NcfQX9uBHrLIg", "X6fNijMCqWwPha5jBCJeYcXIeZN42UFautsPz9jlco8S9", "34w3Tz8VE4AUGFrDsDlSsNYgv", "qtvOvqJ0VH4Y2EQlXwHaWFRUyoDhWQlLWtUpvA1OOcuVj7QIsw");
 
             myStream = Tweetinvi.Stream.CreateFilteredStream();
 
-            DbTopic cfk = new DbTopic(dbName, "CFK", new List<String>() { "cristina kirchner", "@cfkargentina", "cfk" }, null);
+            DbTopic cfk = new DbTopic(dbName, "CFK", new List<String>() { "cristina kirchner", "@cfkargentina", "cfk" }, null, DOMAIN_NACION);
             ListenTo(cfk);
 
             // A presidente / vice
-            DbTopic sci = new DbTopic(dbName, "Sci", new List<String>() { "scioli", "@DanielScioli" }, null);
+            DbTopic sci = new DbTopic(dbName, "Sci", new List<String>() { "scioli", "@DanielScioli" }, null, DOMAIN_NACION);
             ListenTo(sci);
-            DbTopic mac = new DbTopic(dbName, "Mac", new List<String>() { "macri", "@mauriciomacri" }, new List<String>() {"jorge"});
+            DbTopic mac = new DbTopic(dbName, "Mac", new List<String>() { "macri", "@mauriciomacri" }, new List<String>() { "jorge" }, DOMAIN_NACION);
             ListenTo(mac);
-            DbTopic snz = new DbTopic(dbName, "Sanz", new List<String>() { "sanz", "@SanzErnesto" }, new List<String>() {"alejandro"});
+            DbTopic snz = new DbTopic(dbName, "Sanz", new List<String>() { "sanz", "@SanzErnesto" }, new List<String>() { "alejandro" }, DOMAIN_NACION);
             ListenTo(snz);
-            DbTopic car = new DbTopic(dbName, "Carr", new List<String>() { "carrió", "carrio", "lilita", "@elisacarrio" }, null);
+            DbTopic car = new DbTopic(dbName, "Carr", new List<String>() { "carrió", "carrio", "lilita", "@elisacarrio" }, null, DOMAIN_NACION);
             ListenTo(car);
-            DbTopic mas = new DbTopic(dbName, "Mas", new List<String>() { "massa", "@SergioMassa" }, null);
+            DbTopic mas = new DbTopic(dbName, "Mas", new List<String>() { "massa", "@SergioMassa" }, null, DOMAIN_NACION);
             ListenTo(mas);
-            DbTopic dls = new DbTopic(dbName, "DlS", new List<String>() { "de la sota", "@delasotaok" }, null);
+            DbTopic dls = new DbTopic(dbName, "DlS", new List<String>() { "de la sota", "@delasotaok" }, null, DOMAIN_NACION);
             ListenTo(dls);
-            DbTopic stol = new DbTopic(dbName, "Stol", new List<String>() { "stolbizer", "@Stolbizer" }, null);
+            DbTopic stol = new DbTopic(dbName, "Stol", new List<String>() { "stolbizer", "@Stolbizer" }, null, DOMAIN_NACION);
             ListenTo(stol);
-            DbTopic alt = new DbTopic(dbName, "Alt", new List<String>() { "altamira", "@altamirajorge" }, null);
+            DbTopic alt = new DbTopic(dbName, "Alt", new List<String>() { "altamira", "@altamirajorge" }, null, DOMAIN_NACION);
             ListenTo(alt);
-            DbTopic dca = new DbTopic(dbName, "dCñ", new List<String>() { "del caño", "@NicolasdelCano" }, null);
+            DbTopic dca = new DbTopic(dbName, "dCñ", new List<String>() { "del caño", "@NicolasdelCano" }, null, DOMAIN_NACION);
             ListenTo(dca);
 
 
             // A gobernador de Buenos Aires / vice
-            DbTopic afz = new DbTopic(dbName, "AFz", new List<String>() { "anibal", "aníbal", "@FernandezAnibal" }, null);
+            DbTopic afz = new DbTopic(dbName, "AFz", new List<String>() { "anibal", "aníbal", "@FernandezAnibal" }, null, DOMAIN_PROVINCIA);
             ListenTo(afz);
-            DbTopic jDz = new DbTopic(dbName, "Mas", new List<String>() { "julian dominguez", "julián domínguez", "@DominguezJul" }, null);
+            DbTopic jDz = new DbTopic(dbName, "Mas", new List<String>() { "julian dominguez", "julián domínguez", "@DominguezJul" }, null, DOMAIN_PROVINCIA);
             ListenTo(jDz);
-            DbTopic vid = new DbTopic(dbName, "Vid", new List<String>() { "maria eugenia vidal", "maría eugenia vidal", "@mariuvidal" }, null);
+            DbTopic vid = new DbTopic(dbName, "Vid", new List<String>() { "maria eugenia vidal", "maría eugenia vidal", "@mariuvidal" }, null, DOMAIN_PROVINCIA);
             ListenTo(vid);
-            DbTopic chi = new DbTopic(dbName, "Chi", new List<String>() { "christian castillo", "@chipicastillo" }, null);
+            DbTopic chi = new DbTopic(dbName, "Chi", new List<String>() { "christian castillo", "@chipicastillo" }, null, DOMAIN_PROVINCIA);
             ListenTo(chi);
-            DbTopic pit = new DbTopic(dbName, "Pit", new List<String>() { "pitrola", "pitrola", "@nestorpitrola" }, null);
+            DbTopic pit = new DbTopic(dbName, "Pit", new List<String>() { "pitrola", "pitrola", "@nestorpitrola" }, null, DOMAIN_PROVINCIA);
             ListenTo(pit);
-            DbTopic lin = new DbTopic(dbName, "Lin", new List<String>() { "jaime linares", "@LinaresJaime" }, null);
+            DbTopic lin = new DbTopic(dbName, "Lin", new List<String>() { "jaime linares", "@LinaresJaime" }, null, DOMAIN_PROVINCIA);
             ListenTo(lin);
-            DbTopic sol = new DbTopic(dbName, "Sol", new List<String>() { "felipe solá", "felipe sola", "@felipe_sola" }, null);
+            DbTopic sol = new DbTopic(dbName, "Sol", new List<String>() { "felipe solá", "felipe sola", "@felipe_sola" }, null, DOMAIN_PROVINCIA);
             ListenTo(sol);
             // Agregar apodos, que presupongan neg?
 
@@ -162,29 +169,6 @@ namespace TesisC
         }
 
 
-
-        public void AnalyzeTweet(DbTweet tw)
-        {
-            String[] words = tw.Text.Split(new char[] { ' ', '.', ',', '?', '!', '¿', '¡', ';', ':', '-', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (String w in words)
-            {
-                IEnumerable<int> res = from DbWord x in db
-                                       where x.Name.Equals(w.ToLower())
-                                       select x.Value;
-
-                if (res.Count() == 0) // Potencial palabra útil (i.e. no positiva, negativa, stopword... ni topic?)
-                {
-                }
-                else
-                {
-                    if (res.First() == 1) tw.PosValue++;
-                    if (res.First() == -1) tw.NegValue++;
-                }
-            }
-        }
-
-
         public void ListenTo(DbTopic t)
         {
             Action<ITweet> act = (arg) =>
@@ -192,6 +176,26 @@ namespace TesisC
                 if (cantTweets >= maxCantTweets)
                 {
                     myStream.StopStream();
+
+                    //TEMP
+                    
+                    IEnumerable<DbTweet> tws = from DbTweet tw in db
+                                               select tw;
+                    TA.AnalyzeTweetSet(tws).Display();
+
+                    IEnumerable<DbTopic> topics = from DbTopic x in db
+                                                  select x;
+
+                    foreach (DbTopic tp in topics)
+                    {
+                        IEnumerable<DbTweet> tws2 = from DbTweet tw in db
+                                                    where tw.About.Contains(tp.Id) //&& tw.Terms.Contains("muerte")
+                                                    select tw;
+                        Console.Out.WriteLine("\n\nResultados para " + tp.Id + ": ");
+                        TA.AnalyzeTweetSet(tws2).Display();
+                    }
+                    // END TEMP
+
                     db.Close();
                     return;
                 }
@@ -205,10 +209,22 @@ namespace TesisC
                 if (arg.Place != null) Console.Out.WriteLine("En: " + arg.Place.FullName);
                 if (arg.Coordinates != null) Console.Out.WriteLine("*****\n\n");
 
-                DbTweet n = new DbTweet(arg.Id, arg.Text, arg.CreatedBy.UserIdentifier.ScreenName, arg.CreatedAt, arg.FavouriteCount);
+                IEnumerable<DbTweet> existente = from DbTweet tw in db
+                                                 where tw.Id == arg.Id
+                                                 select tw;
                 
-                AnalyzeTweet(n);
-                Console.Out.Write(n.PosValue + "/" + n.NegValue + " ");
+                // Para modificar un tweet ya almacenado (ej. cuando ya mencionaba a otro tópico) en vez de crear otro distinto.
+                DbTweet n;
+                if (existente.Count() == 0)
+                {
+                    n = new DbTweet(arg.Id, arg.Text, arg.CreatedBy.UserIdentifier.ScreenName, arg.CreatedAt, arg.FavouriteCount);
+                    TA.ProcessTweet(n);
+                    Console.Out.Write(n.PosValue + "/" + n.NegValue + " ");
+                }
+                else
+                {
+                    n = existente.First();
+                }        
 
                 IEnumerable<DbTopic> res = from DbTopic x in db
                                            where x.Id.Equals(t.Id)

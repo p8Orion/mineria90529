@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace TesisC
 {
-    class DbWord
+    public class DbWord
     {
         public int Value {get; set;} // -1 negativa, 0 stopword, 1 positiva
         public String Name { get; set; }

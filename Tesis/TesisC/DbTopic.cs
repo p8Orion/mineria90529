@@ -12,15 +12,16 @@ using Db4objects.Db4o.Config;
 
 namespace TesisC
 {
-    class DbTopic
+    public class DbTopic
     {
         public String DbName { get; set; }
         public String Id { get; set; }
         public List<long> TweetsAbout { get; private set; } // ids
         public List<String> Alias { get; private set;  }
         public List<String> Except { get; private set; }
+        public int Domain { get; private set; } // Nacional, provincial, abstracto
 
-        public DbTopic(String dbName, String id, List<String> alias, List<String> except)
+        public DbTopic(String dbName, String id, List<String> alias, List<String> except, int domain)
         {
             this.DbName = dbName;
             this.Id = id;
@@ -32,6 +33,7 @@ namespace TesisC
                 this.Except = except;
 
             this.TweetsAbout = new List<long>();
+            this.Domain = domain;
         }
 
         public DbTopic(String dbName, String id, String alias)
