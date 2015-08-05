@@ -33,13 +33,12 @@ namespace TesisC
 
         public void Display()
         {
-            Console.Out.WriteLine(PosVal + "/" + NegVal + ", amb: " + Ambiguity + ", pop: " + Popularity);
-            Console.Out.WriteLine("Relevant terms: ");
+            Console.Out.WriteLine(PosVal + "/" + NegVal + ", amb: " + Ambiguity + ", pop: " + Popularity + "   ");
 
             int show = 0;
             foreach (var item in relevantList)
             {
-                if (show > 10) break;
+                if (show > 5) break;
                 Console.Out.Write("{0:0.##} " + item.Key+", ", item.Value);
                 show++;
             }

@@ -12,13 +12,13 @@ namespace TesisC
     public class TweetAnalyzer
     {
         private IObjectContainer db;
-        private Dictionary<string, int> Words;
+        private Core Core;
         private Dictionary<String, int> TermFreq; // Frecuencia de los términos en todo el corpus de tweets. Se carga desde la base de datos al inicializar y se va actualizando al aparecer tweets nuevos.
         private int cantTweets;
 
-        public TweetAnalyzer(IObjectContainer database, Dictionary<string,int> words)
+        public TweetAnalyzer(IObjectContainer database, Core core)
         {
-            this.Words = words;
+            this.Core = core;
             this.db = database;
             cantTweets = 0;
             TermFreq = new Dictionary<String, int>();
@@ -42,7 +42,7 @@ namespace TesisC
 
             Console.Out.WriteLine("\nTermFreq:\n");
             foreach(var item in TermFreq) {
-                Console.Out.Write(item.Key + ": " + item.Value + ", ");
+                Console.Out.Write("Freq: " + item.Key + ": " + item.Value + ", ");
             }
         }
 
@@ -140,24 +140,23 @@ namespace TesisC
                         if (cont) continue;
                     }            
 
-                    
+                    /*
                     IEnumerable<DbWord> res = from DbWord x in db
                                            where x.Name.Equals(w.ToLower())
-                                           select x;
+                                           select x;*/
 
-                    int wordValue = Words[w.ToLower()]; // En lugar de res.First, etc.
+                    int wordValue = 0;
+                    if (Core.words.ContainsKey(w.ToLower()))
+                       wordValue = Core.words[w.ToLower()]; // En lugar de res.First, etc.
 
                     bool stopword = false;
-                    if ((res != null && res.FirstOrDefault() != null) && res.FirstOrDefault().Value == 2) // Caso stopword
+                    if (wordValue == 2) // Caso stopword
                     {
                         stopword = true;
                         //Console.Out.WriteLine("Stopword: " + w);
                     }
-                    else if (res != null && res.FirstOrDefault() != null)
-                    {
-                        if (res.FirstOrDefault().Value == 1) tw.PosValue++; // Palabra positiva
-                        if (res.FirstOrDefault().Value == -1) tw.NegValue++; // Palabra negativa
-                    }
+                    else if (wordValue == 1) tw.PosValue++; // Palabra positiva
+                    else if (wordValue == -1) tw.NegValue++; // Palabra negativa
                     else // Caso en que la palabra es el alias de un topic.
                     {
                         IEnumerable<DbTopic> tps = from DbTopic t in db
@@ -180,7 +179,7 @@ namespace TesisC
                         }
                     }
 
-                    if (!stopword)
+                    if (!stopword && w != "")
                     {
                         // Se agrega el término
                         if (!tw.Terms.Contains(w.ToLower()))

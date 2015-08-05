@@ -35,11 +35,11 @@ namespace TesisC
         private IFilteredStream myStream;
 
         private int cantTweets;
-        private int maxCantTweets = 3;
+        private int maxCantTweets = 10;
 
         private TweetAnalyzer TA;
 
-        private Dictionary<String, int> words;
+        public Dictionary<String, int> words { get; private set; }
 
         public Core()
         {
@@ -52,15 +52,14 @@ namespace TesisC
             words = new Dictionary<string, int>();
             InitWords();
 
-            TA = new TweetAnalyzer(db);
+            TA = new TweetAnalyzer(db, this);
         }
 
 
         public void StartStream(object sndr, DoWorkEventArgs e)
         {
             cantTweets = 0;
-
-            myStream.StartStreamMatchingAnyCondition();
+            myStream.StartStreamMatchingAnyCondition();            
         }
 
         public System.IO.Stream GetTopicImage(DbTopic t)
@@ -214,16 +213,18 @@ namespace TesisC
                 IEnumerable<DbTopic> topics = from DbTopic x in db
                                               select x;
 
+                Console.Out.WriteLine("***");
                 foreach (DbTopic tp in topics)
                 {
                     IEnumerable<DbTweet> tws2 = from DbTweet tw in db
                                                 where tw.About.Contains(tp.Id) 
                                                 select tw;
-                    Console.Out.WriteLine("\n\nResultados para " + tp.Id + ": ");
+                    Console.Out.Write("\n\nResultados para " + tp.Id + ": ");
                     AnalysisResults AR = TA.AnalyzeTweetSet(tws2);
                     toRet.Add(tp, AR);
                     AR.Display();
                 }
+                Console.Out.WriteLine("\n***");
             }
             catch (Exception e)
             {
@@ -239,8 +240,8 @@ namespace TesisC
             IEnumerable<DbWord> res = from DbWord x in db
                                       select x;
 
-            if (res.Count() == 0) // No están cargadas las palabras pos/neg/stop
-            {
+            if (res.Count() == 0 || words.Count == 0) // No están cargadas las palabras pos/neg/stop
+            {               
                 Console.Out.WriteLine("***** CARGANDO PALABRAS *****\n\n");
 
                 try
@@ -251,7 +252,7 @@ namespace TesisC
                         {
                             String line = sr.ReadLine(); 
                             db.Store(new DbWord(line, 1));
-                            words.Add(line, 1);
+                            if(!words.ContainsKey(line)) words.Add(line, 1);
                         }
                     }
                     using (StreamReader sr = new StreamReader("palabrasstop.txt"))
@@ -260,7 +261,7 @@ namespace TesisC
                         {
                             String line = sr.ReadLine();
                             db.Store(new DbWord(line, 2));
-                            words.Add(line, 2);
+                            if (!words.ContainsKey(line)) words.Add(line, 2);
                         }
                     }
                     using (StreamReader sr = new StreamReader("palabrasnegativas.txt"))
@@ -269,7 +270,7 @@ namespace TesisC
                         {
                             String line = sr.ReadLine();
                             db.Store(new DbWord(line, -1));
-                            words.Add(line, -1);
+                            if (!words.ContainsKey(line)) words.Add(line, -1);
                         }
                     }
                 }
@@ -317,7 +318,7 @@ namespace TesisC
                     n = existente.First();
                 }
 
-                Console.Out.Write(n.PosValue + "/" + n.NegValue + ", f:" + n.Weight);
+                Console.Out.Write(n.PosValue + "/" + n.NegValue + ", f:" + n.Weight+" ");
 
                 IEnumerable<DbTopic> res = from DbTopic x in db
                                            where x.Id.Equals(t.Id)
