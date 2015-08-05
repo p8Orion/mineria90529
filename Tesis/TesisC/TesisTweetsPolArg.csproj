@@ -135,13 +135,19 @@
     <Compile Include="AnalysisResults.cs" />
     <Compile Include="DbTweet.cs" />
     <Compile Include="DbWord.cs" />
-    <Compile Include="Form1.cs">
+    <Compile Include="FormMainWindow.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="Form1.Designer.cs">
-      <DependentUpon>Form1.cs</DependentUpon>
+    <Compile Include="FormMainWindow.Designer.cs">
+      <DependentUpon>FormMainWindow.cs</DependentUpon>
     </Compile>
-    <Compile Include="Program.cs" />
+    <Compile Include="FormTweets.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FormTweets.Designer.cs">
+      <DependentUpon>FormTweets.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Core.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="DbTopic.cs" />
     <Compile Include="TweetAnalyzer.cs" />
@@ -157,8 +163,11 @@
     <Content Include="palabrasstop.txt" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Form1.resx">
-      <DependentUpon>Form1.cs</DependentUpon>
+    <EmbeddedResource Include="FormMainWindow.resx">
+      <DependentUpon>FormMainWindow.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="FormTweets.resx">
+      <DependentUpon>FormTweets.cs</DependentUpon>
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>

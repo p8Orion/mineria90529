@@ -12,11 +12,13 @@ namespace TesisC
     public class TweetAnalyzer
     {
         private IObjectContainer db;
+        private Dictionary<string, int> Words;
         private Dictionary<String, int> TermFreq; // Frecuencia de los términos en todo el corpus de tweets. Se carga desde la base de datos al inicializar y se va actualizando al aparecer tweets nuevos.
         private int cantTweets;
 
-        public TweetAnalyzer(IObjectContainer database)
+        public TweetAnalyzer(IObjectContainer database, Dictionary<string,int> words)
         {
+            this.Words = words;
             this.db = database;
             cantTweets = 0;
             TermFreq = new Dictionary<String, int>();
@@ -114,6 +116,7 @@ namespace TesisC
             return new AnalysisResults(posVal, negVal, ambiguity, popularity, relevantTerms);
         }
 
+
         public void ProcessTweet(DbTweet tw)
         {
             try
@@ -124,30 +127,68 @@ namespace TesisC
                 {
                     if (w.Contains('/')) continue; // Ignoro urls
                     if (w.Length == 1) continue;
-                    //if (w.Contains('@'))
+                    if (w.Contains('@')) // Sólo guardo @alias de los topics
+                    {
+                        bool cont = true;
+                        IEnumerable<String> topicUsers = from DbTopic t in db
+                                                 select t.Alias[1];
+                        
+                        foreach(String u in topicUsers)
+                            if(w.ToLower() == u.ToLower())
+                                cont = false;
 
+                        if (cont) continue;
+                    }            
 
-                    IEnumerable<int> res = from DbWord x in db
+                    
+                    IEnumerable<DbWord> res = from DbWord x in db
                                            where x.Name.Equals(w.ToLower())
-                                           select x.Value;
+                                           select x;
 
-                    if (res.Count() > 0 && res.First() == 0) // Stopword
+                    int wordValue = Words[w.ToLower()]; // En lugar de res.First, etc.
+
+                    bool stopword = false;
+                    if ((res != null && res.FirstOrDefault() != null) && res.FirstOrDefault().Value == 2) // Caso stopword
                     {
+                        stopword = true;
+                        //Console.Out.WriteLine("Stopword: " + w);
                     }
-                    else
+                    else if (res != null && res.FirstOrDefault() != null)
                     {
-                        if (res.Count() != 0)
+                        if (res.FirstOrDefault().Value == 1) tw.PosValue++; // Palabra positiva
+                        if (res.FirstOrDefault().Value == -1) tw.NegValue++; // Palabra negativa
+                    }
+                    else // Caso en que la palabra es el alias de un topic.
+                    {
+                        IEnumerable<DbTopic> tps = from DbTopic t in db
+                                                    select t;
+                        
+                        DbTopic isTopic = null;
+                        foreach (DbTopic tp in tps)
                         {
-                            if (res.First() == 1) tw.PosValue++; // Palabra positiva
-                            if (res.First() == -1) tw.NegValue++; // Palabra negativa
+                            foreach (String a in tp.Alias)
+                                if (w.ToLower().Contains(a.ToLower()))
+                                {
+                                    isTopic = tp;
+                                    break;
+                                }
                         }
-                        // Término
+                        if (isTopic != null && !isTopic.Alias.Contains(w.ToLower()))
+                        {
+                            isTopic.Alias.Add(w.ToLower());
+                            Console.Out.WriteLine("Agregado " + w.ToLower() + " como topic a " + isTopic.Id);
+                        }
+                    }
+
+                    if (!stopword)
+                    {
+                        // Se agrega el término
                         if (!tw.Terms.Contains(w.ToLower()))
                             tw.Terms.Add(w.ToLower());
 
                         if (TermFreq.ContainsKey(w.ToLower())) TermFreq[w.ToLower()]++;
                         else TermFreq[w.ToLower()] = 1;
-                    }
+                    }                                  
                 }
 
                 db.Store(tw);
@@ -155,7 +196,8 @@ namespace TesisC
             catch (Exception e)
             {
                 Console.Out.WriteLine("ProcessTweet: Error analizando tweet.");
-                Console.Out.WriteLine(e.Message);
+                Console.Out.WriteLine(e.Message + "\n" + e.StackTrace);
+                
             }
 
             cantTweets++;
