@@ -55,13 +55,14 @@ namespace TesisC
 
             foreach (DbTweet tw in tws)
             {
-                posVal += tw.PosValue * tw.Weight;
-                negVal += tw.NegValue * tw.Weight;
-                popularity += tw.Weight;
+                posVal += tw.PosValue;
+                negVal += tw.NegValue;
+                popularity += 1;
             }
 
             return new AnalysisResults(posVal, negVal, 0, popularity, new Dictionary<String,double>());
         }
+
 
         public AnalysisResults AnalyzeTweetSet(IEnumerable<DbTweet> tws)
         {
@@ -77,13 +78,13 @@ namespace TesisC
             try
             {
                 foreach (DbTweet tw in tws) {
-                    posVal += tw.PosValue * tw.Weight;
-                    negVal += tw.NegValue * tw.Weight;
+                    posVal += tw.PosValue;
+                    negVal += tw.NegValue;
                     if (tw.PosValue + tw.NegValue > 0) {
                         ambiguity += 1 - (Math.Abs(tw.PosValue - tw.NegValue) / (tw.PosValue + tw.NegValue)); // |x-y|/(x+y)
                         ambiguityOver++;
                     }
-                    popularity += tw.Weight;
+                    popularity += 1;
 
                     foreach(String term in tw.Terms) {
                         if (termAppearances.ContainsKey(term)) termAppearances[term]++;
@@ -121,7 +122,7 @@ namespace TesisC
         {
             try
             {
-                String[] words = tw.Text.Split(new char[] { ' ', '.', ',', '?', '!', '¿', '¡', ';', ':', '-', '\n', '(', ')', '"', '\'', '[', ']', '+', '|', '“', '”', '…'}, StringSplitOptions.RemoveEmptyEntries);
+                String[] words = tw.Text.Split(new char[] { ' ', '.', ',', '?', '!', '¿', '¡', ';', ':', '-', '\n', '(', ')', '"', '\'', '[', ']', '+', '|', '“', '”', '…', '*'}, StringSplitOptions.RemoveEmptyEntries);
 
                 foreach (String w in words)
                 {
@@ -157,6 +158,7 @@ namespace TesisC
                     }
                     else if (wordValue == 1) tw.PosValue++; // Palabra positiva
                     else if (wordValue == -1) tw.NegValue++; // Palabra negativa
+                     /* // Acumula DEMASIADOS (ej. #hashtags) y no sirve
                     else // Caso en que la palabra es el alias de un topic.
                     {
                         IEnumerable<DbTopic> tps = from DbTopic t in db
@@ -177,7 +179,7 @@ namespace TesisC
                             isTopic.Alias.Add(w.ToLower());
                             Console.Out.WriteLine("Agregado " + w.ToLower() + " como topic a " + isTopic.Id);
                         }
-                    }
+                    }*/
 
                     if (!stopword && w != "")
                     {

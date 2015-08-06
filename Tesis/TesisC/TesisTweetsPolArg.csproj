@@ -51,6 +51,12 @@
     <Reference Include="Db4objects.Db4o.Linq">
       <HintPath>packages\db4o-devel.8.1.184.15492\lib\net40\Db4objects.Db4o.Linq.dll</HintPath>
     </Reference>
+    <Reference Include="GMap.NET.Core">
+      <HintPath>GMap\GMap.NET.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="GMap.NET.WindowsForms">
+      <HintPath>GMap\GMap.NET.WindowsForms.dll</HintPath>
+    </Reference>
     <Reference Include="Microsoft.Threading.Tasks, Version=1.0.12.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>packages\Microsoft.Bcl.Async.1.0.168\lib\net40\Microsoft.Threading.Tasks.dll</HintPath>
       <Private>True</Private>
@@ -134,7 +140,6 @@
   <ItemGroup>
     <Compile Include="AnalysisResults.cs" />
     <Compile Include="DbTweet.cs" />
-    <Compile Include="DbWord.cs" />
     <Compile Include="FormMainWindow.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -150,6 +155,12 @@
     <Compile Include="Core.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="DbTopic.cs" />
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <Compile Include="DbTimeBlock.cs" />
     <Compile Include="TweetAnalyzer.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -168,6 +179,10 @@
     </EmbeddedResource>
     <EmbeddedResource Include="FormTweets.resx">
       <DependentUpon>FormTweets.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>

@@ -10,6 +10,9 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Gma.CodeCloud.Controls;
 using Gma.CodeCloud.Controls.Geometry;
+using GMap.NET;
+using GMap.NET.WindowsForms;
+using GMap.NET.WindowsForms.Markers;
 
 namespace TesisC
 {
@@ -20,13 +23,14 @@ namespace TesisC
 
         private CloudControl cloud;
 
-        private int graphTime;
         private int sortByCol = 2;
 
         private DbTopic ActiveTopic = null;
         private List<KeyValuePair<DbTopic, AnalysisResults>> resList;
 
         private bool userMode = false;
+
+        private PointLatLng Argentina;
 
         public FormMainWindow()
         {
@@ -75,7 +79,16 @@ namespace TesisC
                 | System.Reflection.BindingFlags.NonPublic);
             pi.SetValue(tableLayoutPanel1, true, null);
 
-            graphTime = 0;
+            // Map
+            gMapControl1.MapProvider = GMap.NET.MapProviders.BingHybridMapProvider.Instance;
+            gMapControl1.Zoom = 4;
+            GMap.NET.GMaps.Instance.Mode = GMap.NET.AccessMode.ServerAndCache;
+
+            Argentina = new PointLatLng(-40.4, -63.6);
+            gMapControl1.Position = Argentina;
+           // gMapControl1.SetPositionByKeywords("Bahia Blanca");
+            
+            gMapControl1.Update();
 
             cloudWorker = new BackgroundWorker();
 
@@ -120,7 +133,7 @@ namespace TesisC
             else
             {
                 worker.RunWorkerAsync();
-                UpdateData();
+                UpdateChart();
             }
         }
 
@@ -134,6 +147,68 @@ namespace TesisC
             Dictionary<DbTopic, AnalysisResults> res = core.GetTopicsData();
             resList = res.ToList();
             UpdateTable();
+            UpdateMap();
+            UpdateChart();
+        }
+
+        private void UpdateChart()
+        {
+            
+            chart1.Series.Clear();
+            
+            foreach(DbTopic t in core.GetTopics())
+            {
+                chart1.Series.Add(t.Alias[1]);
+                chart1.Series[t.Alias[1]].ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.FastLine;
+                chart1.Series[t.Alias[1]].BorderWidth = 2;
+            }
+
+            IEnumerable<DbTimeBlock> tbs = core.GetTimeBlocks(TimeSpan.FromMinutes(1), 5);
+            int graphTime = -tbs.Count() + 1;
+            chart1.ChartAreas[0].AxisX.Maximum = 0;
+            chart1.ChartAreas[0].AxisX.Minimum = -tbs.Count() + 1;
+
+            foreach (DbTimeBlock tb in tbs)
+            {
+                foreach (DbTopic t in core.GetTopics())
+                {
+                    if (tb.TopicAR[t] != null)
+                        chart1.Series[t.Alias[1]].Points.AddXY(graphTime, tb.TopicAR[t].PosVal);
+                }
+                graphTime++;
+            }
+        }
+
+        private void UpdateMap()
+        {
+            gMapControl1.Overlays.Clear();
+            GMapOverlay markersOverlay = new GMapOverlay("markers");
+            this.gMapControl1.Overlays.Add(markersOverlay);
+
+            IEnumerable<DbTweet> tws = core.GetGeolocatedTweets(10);
+
+            foreach (DbTweet tw in tws)
+            {
+                try
+                {
+                    Console.Out.WriteLine(">>> MAP: " + tw.Coord.Item1 + ", " + tw.Coord.Item2);
+                    gMapControl1.Visible = false;
+                    GMarkerGoogle marker = null;
+
+                    if (tw.Coord != null)
+                        marker = new GMarkerGoogle(new PointLatLng(tw.Coord.Item1, tw.Coord.Item2), new Bitmap(core.GetTopicImage(0, core.GetDbTopicFromId(tw.About[0]))));
+
+                    markersOverlay.Markers.Add(marker);
+                }
+                catch (Exception e)
+                {
+                    Console.Out.WriteLine("Problema al agregar marker: " + e.Message + "\n"+e.StackTrace);
+                }
+            }
+
+            this.gMapControl1.Overlays.Add(markersOverlay);
+            gMapControl1.Visible = true;
+            gMapControl1.Update();           
         }
 
         private void UpdateTable()
@@ -198,7 +273,7 @@ namespace TesisC
                             int cantCloudWords = 0;
                             foreach (var i in item.Value.relevantList)
                             {
-                                if (cantCloudWords > 25) break;
+                                if (cantCloudWords >  50) break;
 
                                 // Si la palabra es el topic de la nube, la saltea.
                                 bool cont = false;
@@ -233,7 +308,7 @@ namespace TesisC
                             Console.Out.WriteLine("No se pudo crear nube de palabras. Probablemente no sean suficientes.");
                         }
 
-                        pictureBox1.Image = Image.FromStream(core.GetTopicImage(item.Key));
+                        pictureBox1.Image = core.GetTopicImage(2, item.Key);
                     };
                     cloudWorker.RunWorkerCompleted += (e, a) => {
                         
@@ -285,20 +360,12 @@ namespace TesisC
                 tableLayoutPanel1.Controls.Add(bTopicAmb, 5, row);
 
                 row++;
-
-                if (chart1.Series.FindByName(item.Key.Id) == null)
-                {
-                    chart1.Series.Add(item.Key.Id);
-                    chart1.Series[item.Key.Id].ChartType =
-                         System.Windows.Forms.DataVisualization.Charting.SeriesChartType.FastLine;
-                }
-                chart1.Series[item.Key.Id].Points.AddXY(graphTime, item.Value.PosVal);
             }
 
             tableLayoutPanel1.AutoSize = true;
             tableLayoutPanel1.Update();
 
-            graphTime++;
+            //graphTime++;
         }
 
         private void Form1_Load(object sender, EventArgs e)
@@ -326,6 +393,11 @@ namespace TesisC
 
             FormTweets tweetsWindow = new FormTweets(core, tweetSet, ActiveTopic, FormTweets.SelectionWordRelated, w);
             tweetsWindow.Show(); 
+        }
+
+        private void ButtonPurgeClick(object sender, EventArgs e)
+        {
+            core.PurgeDB();
         }
 
        

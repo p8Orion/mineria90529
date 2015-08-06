@@ -18,15 +18,16 @@ using Db4objects.Db4o;
 using Db4objects.Db4o.Config;
 using Db4objects.Db4o.Linq;
 using Db4objects.Db4o.Config.Encoding;
+using System.Timers;
 
 
 namespace TesisC
 {
     public class Core
     {
-        public const int DOMAIN_ABSTRACTO = 0;
-        public const int DOMAIN_NACION = 1;
-        public const int DOMAIN_PROVINCIA = 2;
+        public const int Domain_abstracto = 0;
+        public const int Domain_nacion = 1;
+        public const int Domain_provincia = 2;
 
         // Base de datos
         private String dbName = "polArg";
@@ -35,9 +36,11 @@ namespace TesisC
         private IFilteredStream myStream;
 
         private int cantTweets;
-        private int maxCantTweets = 10;
+        private int maxCantTweets = 20;
 
         private TweetAnalyzer TA;
+
+        private System.Timers.Timer blockTimer;
 
         public Dictionary<String, int> words { get; private set; }
 
@@ -45,14 +48,18 @@ namespace TesisC
         {
             // Base de datos
             IEmbeddedConfiguration config = Db4oEmbedded.NewConfiguration();
-            config.Common.UpdateDepth = 2;  // Para almancenar objetos lista en DB.  
-            config.Common.StringEncoding = StringEncodings.Utf8();   // Esto ahorra MUCHO espacio
+            config.Common.UpdateDepth = 3;  // Para almancenar objetos anidados (listas, etc.) en DB.  
+            //config.Common.StringEncoding = StringEncodings.Utf8();   // Esto ahorra MUCHO espacio
             db = Db4oEmbedded.OpenFile(config, dbName);
 
             words = new Dictionary<string, int>();
             InitWords();
 
             TA = new TweetAnalyzer(db, this);
+            blockTimer = new System.Timers.Timer();
+            blockTimer.Interval = 1000 * 60;
+            blockTimer.Elapsed += new System.Timers.ElapsedEventHandler(OnBlockTimer);
+            blockTimer.Start();
         }
 
 
@@ -62,10 +69,115 @@ namespace TesisC
             myStream.StartStreamMatchingAnyCondition();            
         }
 
-        public System.IO.Stream GetTopicImage(DbTopic t)
+        public Image GetTopicImage(int size, DbTopic t)
         {
-            return Tweetinvi.User.GetProfileImageStream(Tweetinvi.User.GetUserFromScreenName(t.Alias[1]), Tweetinvi.Core.Enum.ImageSize.bigger);
+            if (size == 0)
+            {
+                if(t.Image[0] == null)
+                    t.Image[0] = Image.FromStream(Tweetinvi.User.GetProfileImageStream(Tweetinvi.User.GetUserFromScreenName(t.Alias[1]), Tweetinvi.Core.Enum.ImageSize.mini));
+                return t.Image[0];
+            }
+            else if (size == 1)
+            {
+                if (t.Image[1] == null)
+                    t.Image[1] = Image.FromStream(Tweetinvi.User.GetProfileImageStream(Tweetinvi.User.GetUserFromScreenName(t.Alias[1]), Tweetinvi.Core.Enum.ImageSize.normal));
+                return t.Image[1];
+            }
+            else
+            {
+                if (t.Image[2] == null)
+                    t.Image[2] = Image.FromStream(Tweetinvi.User.GetProfileImageStream(Tweetinvi.User.GetUserFromScreenName(t.Alias[1]), Tweetinvi.Core.Enum.ImageSize.bigger));
+                return t.Image[2];
+            }
         }
+
+        public IEnumerable<DbTweet> GetTweetsInTimeInterval(DateTime start, DateTime end, DbTopic about)
+        {
+            IEnumerable<DbTweet> toRet = null;
+
+            if (about == null)
+            {
+                toRet = from DbTweet tw in db
+                        where (start.CompareTo(tw.Added) <= 0 && tw.Added.CompareTo(end) < 0) 
+                        select tw;
+            }
+            else
+            {
+                toRet = from DbTweet tw in db
+                        where (start.CompareTo(tw.Added) <= 0 && tw.Added.CompareTo(end) < 0 && tw.About.Contains(about.Id))
+                        select tw;
+            }
+
+            return toRet;
+        }
+
+        public IEnumerable<DbTopic> GetTopics()
+        {
+            return db.Query<DbTopic>();
+        }
+
+        // Devuelve sólo los intervalos de cierto ancho, ordenados de más viejo a más nuevo
+        public IEnumerable<DbTimeBlock> GetTimeBlocks(TimeSpan intervalSize, int amount)
+        {
+            IEnumerable<DbTimeBlock> toRet = from DbTimeBlock tb in db
+                   where tb.Length.CompareTo(intervalSize) == 0
+                   orderby tb.Start descending
+                   select tb;
+
+            if (toRet.Count() > amount)
+                toRet = toRet.Take(amount);
+            
+            return toRet.Reverse();
+        }
+
+        private void OnBlockTimer(object source, ElapsedEventArgs e)
+        {
+            BuildTimeBlock();
+        }
+
+        // Último minuto
+        public DbTimeBlock BuildTimeBlock()
+        {
+            IEnumerable<DbTweet> globalToProc = GetTweetsInTimeInterval(DateTime.Now.AddMinutes(-1), DateTime.Now, null);
+            AnalysisResults globalAR = TA.AnalyzeTweetSet(globalToProc);
+
+            Dictionary<DbTopic, AnalysisResults> allTopicsAR = new Dictionary<DbTopic, AnalysisResults>();
+            foreach (DbTopic t in db.Query<DbTopic>())
+            {
+                IEnumerable<DbTweet> topicToProc = GetTweetsInTimeInterval(DateTime.Now.AddMinutes(-1), DateTime.Now, t);
+                AnalysisResults topicAR = TA.AnalyzeTweetSet(topicToProc);
+                allTopicsAR.Add(t, topicAR);
+            }
+
+            DbTimeBlock toRet = new DbTimeBlock(DateTime.Now.AddMinutes(-1), TimeSpan.FromMinutes(1), globalAR, allTopicsAR);
+            db.Store(toRet);
+
+            Console.Out.WriteLine("\n\n[ BUILT TIME BLOCK ]\n");
+            return toRet;
+        }
+
+
+        public void PurgeDB()
+        {
+            IEnumerable<DbTweet> toRemove = GetTweetsInTimeInterval(DateTime.Now.AddDays(-1), DateTime.Now.AddMinutes(-1), null); //test, iría -30 o -1 hora, no?
+
+            Console.Out.WriteLine("[ DATABASE CLEANUP START ]");
+
+            Console.Out.WriteLine("[ DbTopics: " + db.Query<DbTopic>().Count + " ]");
+            Console.Out.WriteLine("[ DbTweets: " + db.Query<DbTweet>().Count + " ]");
+            Console.Out.WriteLine("[ DbTimeBlocks: " + db.Query<DbTimeBlock>().Count + " ]");
+
+            Console.Out.WriteLine("Deleted: ");
+            foreach (DbTweet tw in toRemove)
+            {
+                db.Delete(tw);
+                Console.Out.Write(tw.Added + " | ");
+            }
+
+            Console.Out.WriteLine("[ Ahora DbTweets: " + db.Query<DbTweet>().Count + " ]");
+            Console.Out.WriteLine("[ DATABASE CLEANUP END ]");
+        }
+
 
         public void InitListen() 
         {
@@ -76,75 +188,52 @@ namespace TesisC
 
             myStream = Tweetinvi.Stream.CreateFilteredStream();
 
-            DbTopic cfk = new DbTopic(dbName, "CFK", new List<String>() { "cristina kirchner", "@cfkargentina", "cfk" }, null, DOMAIN_NACION);
+            DbTopic cfk = new DbTopic(dbName, "CFK", new List<String>() { "cristina kirchner", "@cfkargentina", "cfk" }, null, Domain_nacion);
             ListenTo(cfk);
 
             // A presidente / vice
-            DbTopic sci = new DbTopic(dbName, "Sci", new List<String>() { "scioli", "@danielscioli", "daniel scioli" }, null, DOMAIN_NACION);
+            DbTopic sci = new DbTopic(dbName, "Sci", new List<String>() { "scioli", "@danielscioli", "daniel scioli" }, null, Domain_nacion);
             ListenTo(sci);
-            DbTopic mac = new DbTopic(dbName, "Mac", new List<String>() { "macri", "@mauriciomacri", "mauricio macri" }, new List<String>() { "jorge" }, DOMAIN_NACION);
+            DbTopic mac = new DbTopic(dbName, "Mac", new List<String>() { "macri", "@mauriciomacri", "mauricio macri" }, new List<String>() { "jorge" }, Domain_nacion);
             ListenTo(mac);
-            DbTopic snz = new DbTopic(dbName, "Sanz", new List<String>() { "sanz", "@sanzernesto", "ernesto sanz" }, new List<String>() { "alejandro" }, DOMAIN_NACION);
+            DbTopic snz = new DbTopic(dbName, "Sanz", new List<String>() { "sanz", "@sanzernesto", "ernesto sanz" }, new List<String>() { "alejandro" }, Domain_nacion);
             ListenTo(snz);
-            DbTopic car = new DbTopic(dbName, "Carr", new List<String>() { "carrió", "@elisacarrio", "carrio", "lilita", "elisa carrio", "elisa carrió" }, null, DOMAIN_NACION);
+            DbTopic car = new DbTopic(dbName, "Carr", new List<String>() { "carrió", "@elisacarrio", "carrio", "lilita", "elisa carrio", "elisa carrió" }, null, Domain_nacion);
             ListenTo(car);
-            DbTopic mas = new DbTopic(dbName, "Mas", new List<String>() { "massa", "@sergiomassa", "sergio massa" }, null, DOMAIN_NACION);
+            DbTopic mas = new DbTopic(dbName, "Mas", new List<String>() { "massa", "@sergiomassa", "sergio massa" }, null, Domain_nacion);
             ListenTo(mas);
-            DbTopic dls = new DbTopic(dbName, "DlS", new List<String>() { "de la sota", "@delasotaok", "manuel de la sota" }, null, DOMAIN_NACION);
+            DbTopic dls = new DbTopic(dbName, "DlS", new List<String>() { "de la sota", "@delasotaok", "manuel de la sota" }, null, Domain_nacion);
             ListenTo(dls);
-            DbTopic stol = new DbTopic(dbName, "Stol", new List<String>() { "stolbizer", "@stolbizer", "margarita stolbizer" }, null, DOMAIN_NACION);
+            DbTopic stol = new DbTopic(dbName, "Stol", new List<String>() { "stolbizer", "@stolbizer", "margarita stolbizer" }, null, Domain_nacion);
             ListenTo(stol);
-            DbTopic alt = new DbTopic(dbName, "Alt", new List<String>() { "altamira", "@altamirajorge", "jorge altamira" }, null, DOMAIN_NACION);
+            DbTopic alt = new DbTopic(dbName, "Alt", new List<String>() { "altamira", "@altamirajorge", "jorge altamira" }, null, Domain_nacion);
             ListenTo(alt);
-            DbTopic dca = new DbTopic(dbName, "dCñ", new List<String>() { "del caño", "@nicolasdelcano", "nicolás del caño", "nicolas del caño" }, null, DOMAIN_NACION);
+            DbTopic dca = new DbTopic(dbName, "dCñ", new List<String>() { "del caño", "@nicolasdelcano", "nicolás del caño", "nicolas del caño" }, null, Domain_nacion);
             ListenTo(dca);
 
 
             // A gobernador de Buenos Aires / vice
-            DbTopic afz = new DbTopic(dbName, "AFz", new List<String>() { "anibal", "@fernandezanibal", "aníbal", "aníbal fernández", "anibal fernandez"}, null, DOMAIN_PROVINCIA);
+            DbTopic afz = new DbTopic(dbName, "AFz", new List<String>() { "anibal", "@fernandezanibal", "aníbal", "aníbal fernández", "anibal fernandez" }, null, Domain_provincia);
             ListenTo(afz);
-            DbTopic jDz = new DbTopic(dbName, "Mas", new List<String>() { "julian dominguez", "@dominguezjul", "julián domínguez" }, null, DOMAIN_PROVINCIA);
+            DbTopic jDz = new DbTopic(dbName, "Mas", new List<String>() { "julian dominguez", "@dominguezjul", "julián domínguez" }, null, Domain_provincia);
             ListenTo(jDz);
-            DbTopic vid = new DbTopic(dbName, "Vid", new List<String>() { "maria eugenia vidal", "@mariuvidal", "maría eugenia vidal" }, null, DOMAIN_PROVINCIA);
+            DbTopic vid = new DbTopic(dbName, "Vid", new List<String>() { "maria eugenia vidal", "@mariuvidal", "maría eugenia vidal" }, null, Domain_provincia);
             ListenTo(vid);
-            DbTopic chi = new DbTopic(dbName, "Chi", new List<String>() { "christian castillo", "@chipicastillo" }, null, DOMAIN_PROVINCIA);
+            DbTopic chi = new DbTopic(dbName, "Chi", new List<String>() { "christian castillo", "@chipicastillo" }, null, Domain_provincia);
             ListenTo(chi);
-            DbTopic pit = new DbTopic(dbName, "Pit", new List<String>() { "pitrola", "@nestorpitrola", "nestor pitrola", }, null, DOMAIN_PROVINCIA);
+            DbTopic pit = new DbTopic(dbName, "Pit", new List<String>() { "pitrola", "@nestorpitrola", "nestor pitrola", }, null, Domain_provincia);
             ListenTo(pit);
-            DbTopic lin = new DbTopic(dbName, "Lin", new List<String>() { "jaime linares", "@linaresjaime" }, null, DOMAIN_PROVINCIA);
+            DbTopic lin = new DbTopic(dbName, "Lin", new List<String>() { "jaime linares", "@linaresjaime" }, null, Domain_provincia);
             ListenTo(lin);
-            DbTopic sol = new DbTopic(dbName, "Sol", new List<String>() { "felipe solá", "@felipe_sola", "felipe sola", }, null, DOMAIN_PROVINCIA);
+            DbTopic sol = new DbTopic(dbName, "Sol", new List<String>() { "felipe solá", "@felipe_sola", "felipe sola", }, null, Domain_provincia);
             ListenTo(sol);
             // Agregar apodos, que presupongan neg?
 
-            // GEOLOC -- Este enfoque no sirve porque filtra los no-geoloc
-            /*
-            Action<ITweet> act2 = (a) =>
-            {
-                if (a.Coordinates != null) Console.Out.WriteLine(a.Text + "\n\n");
-                else Console.Out.WriteLine(",");
-                if (a.Coordinates != null) Console.Out.WriteLine("@ " + a.Coordinates.Latitude + ", " + a.Coordinates.Longitude);
-                //if (a.Place != null) Console.Out.WriteLine("En place: " + a.Place);
-                if (a.Coordinates != null) Console.Out.WriteLine("*****\n\n");
-            };
-            
-            myStream.AddLocation(new Coordinates(-50.524808, -55.879718), new Coordinates(-71.073531, -21.212183), act2);*/
-
-
-            //myStream.MatchingTweetReceived += (s, a) => {  };
-            //myStream.StartStreamMatchingAnyCondition();
 
             myStream.StreamStopped += (sender, args) =>
                 {
-                    Console.Out.WriteLine("***** Stream stopped!");
+                    Console.Out.Write("(Stream stopped) ");
                 };
-
-            //myStream.StartStreamMatchingAnyCondition();
-
-            //System.Threading.Thread.Sleep(20000);
-
-            //myStream.StopStream();
-            //db.Close();
         }
 
 
@@ -153,6 +242,17 @@ namespace TesisC
         {
             FormMainWindow f = new FormMainWindow();
             f.ShowDialog();
+        }
+
+
+        public IEnumerable<DbTweet> GetGeolocatedTweets(int amount)
+        {
+            IEnumerable<DbTweet> toRet = (from DbTweet t in db
+                                         where t.Coord != null //|| t.Place != null
+                                         orderby t.Publish descending
+                                         select t).Take(10);
+
+            return toRet;            
         }
 
         public DbTopic GetDbTopicFromAlias(String s)
@@ -166,13 +266,13 @@ namespace TesisC
             return null;
         }
 
-        public DbWord GetDbWordFromName(String s)
+        public DbTopic GetDbTopicFromId(String s)
         {
-            IEnumerable<DbWord> ws = from DbWord x in db select x;
+            IEnumerable<DbTopic> dbt = from DbTopic x in db select x;
 
-            foreach (DbWord w in ws)
-                if (w.Name == s)
-                    return w;
+            foreach (DbTopic t in dbt)
+                if (t.Id == s)
+                    return t;
 
             return null;
         }
@@ -237,10 +337,7 @@ namespace TesisC
 
         public void InitWords()
         {
-            IEnumerable<DbWord> res = from DbWord x in db
-                                      select x;
-
-            if (res.Count() == 0 || words.Count == 0) // No están cargadas las palabras pos/neg/stop
+            if (words.Count == 0) // No están cargadas las palabras pos/neg/stop
             {               
                 Console.Out.WriteLine("***** CARGANDO PALABRAS *****\n\n");
 
@@ -251,7 +348,6 @@ namespace TesisC
                         while (!sr.EndOfStream)
                         {
                             String line = sr.ReadLine(); 
-                            db.Store(new DbWord(line, 1));
                             if(!words.ContainsKey(line)) words.Add(line, 1);
                         }
                     }
@@ -260,7 +356,6 @@ namespace TesisC
                         while (!sr.EndOfStream)
                         {
                             String line = sr.ReadLine();
-                            db.Store(new DbWord(line, 2));
                             if (!words.ContainsKey(line)) words.Add(line, 2);
                         }
                     }
@@ -269,7 +364,6 @@ namespace TesisC
                         while (!sr.EndOfStream)
                         {
                             String line = sr.ReadLine();
-                            db.Store(new DbWord(line, -1));
                             if (!words.ContainsKey(line)) words.Add(line, -1);
                         }
                     }
@@ -294,14 +388,13 @@ namespace TesisC
                     return;
                 }
 
-                if (arg.Coordinates != null) Console.Out.Write(t.Id + "(GEO) ");
                 else Console.Out.Write(t.Id + " ");
 
-                if (arg.Language != Tweetinvi.Core.Enum.Language.Spanish) 
+                if (arg.Language != Tweetinvi.Core.Enum.Language.Spanish)
+                {
+                    //Console.Out.WriteLine("!!! No español: " + arg.Text);
                     return;
-                if (arg.Coordinates != null) Console.Out.WriteLine("En: " + arg.Coordinates.Latitude + ", " + arg.Coordinates.Longitude);
-                if (arg.Place != null) Console.Out.WriteLine("En: " + arg.Place.FullName);
-                if (arg.Coordinates != null) Console.Out.WriteLine("*****\n\n");
+                }
 
                 IEnumerable<DbTweet> existente = from DbTweet tw in db
                                                  where tw.Id == arg.Id
@@ -311,21 +404,34 @@ namespace TesisC
                 DbTweet n;
                 if (existente != null && existente.Count() == 0)
                 {
-                    n = new DbTweet(arg.Id, arg.Text, arg.CreatedBy.UserIdentifier.ScreenName, arg.CreatedAt, arg.FavouriteCount);      
+                    n = new DbTweet(arg.Id, arg.Text, arg.CreatedBy.UserIdentifier.ScreenName, arg.CreatedAt, DateTime.Now, arg.RetweetCount);      
                 }
                 else
                 {
                     n = existente.First();
                 }
 
-                Console.Out.Write(n.PosValue + "/" + n.NegValue + ", f:" + n.Weight+" ");
+                if (arg.Coordinates != null)
+                {
+                    Console.Out.WriteLine("> En: " + arg.Coordinates.Latitude + ", " + arg.Coordinates.Longitude);
+                    n.Coord = new Tuple<float, float>((float)arg.Coordinates.Latitude, (float)arg.Coordinates.Longitude);
+                }
+                else if (arg.Place != null)
+                {
+                    Console.Out.WriteLine("> En: " + arg.Place.FullName);
+                    n.Coord = new Tuple<float, float>((float)arg.Place.BoundingBox.Coordinates[0].Latitude, (float)arg.Place.BoundingBox.Coordinates[0].Longitude);
+                    Console.Out.WriteLine("> O sea: " + n.Coord.Item1 +", "+n.Coord.Item2);
+                }
 
+                Console.Out.Write(n.PosValue + "/" + n.NegValue + " rt:" + n.RT+" ");
+
+
+                // Evito topics duplicados si ya están en la base de datos.
                 IEnumerable<DbTopic> res = from DbTopic x in db
-                                           where x.Id.Equals(t.Id)
+                                           where x.Id == t.Id
                                            select x; 
-                DbTopic dbt;
-                
-                if (res.Count() == 0) dbt = t;
+                DbTopic dbt;                
+                if (res==null || res.Count() == 0) dbt = t;
                 else dbt = (DbTopic)res.First();
 
                 // Saltear tweet en caso de que mencione una palabra prohibida para un tópico dado (e.g. "alejandro" en "sanz")

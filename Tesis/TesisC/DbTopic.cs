@@ -9,6 +9,7 @@ using Tweetinvi.Core.Interfaces.Streaminvi;
 using Tweetinvi.Logic.Model;
 using Db4objects.Db4o;
 using Db4objects.Db4o.Config;
+using System.Drawing;
 
 namespace TesisC
 {
@@ -20,6 +21,7 @@ namespace TesisC
         public List<String> Alias { get; private set;  }
         public List<String> Except { get; private set; }
         public int Domain { get; private set; } // Nacional, provincial, abstracto
+        public Image[] Image { get; set; }
 
         public DbTopic(String dbName, String id, List<String> alias, List<String> except, int domain)
         {
@@ -34,6 +36,7 @@ namespace TesisC
 
             this.TweetsAbout = new List<long>();
             this.Domain = domain;
+            this.Image = new Image[3];
         }
 
         public DbTopic(String dbName, String id, String alias)

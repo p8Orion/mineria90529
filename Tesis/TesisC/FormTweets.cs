@@ -45,8 +45,8 @@ namespace TesisC
             {
                 if (Selection == SelectionFav)
                 {
-                    TweetList = TweetList.Where(x => x.Weight > 1).ToList();
-                    TweetList.Sort((x, y) => { return -x.Weight.CompareTo(y.Weight); });                   
+                    TweetList = TweetList.Where(x => x.RT > 1).ToList();
+                    TweetList.Sort((x, y) => { return -x.RT.CompareTo(y.RT); });                   
                     if (TweetList.Count > 5) TweetList.RemoveRange(5, TweetList.Count - 5);                    
                 }
                 if (Selection == SelectionPos)
@@ -87,13 +87,13 @@ namespace TesisC
                         toAdd.SelectionColor = c;
                         toAdd.SelectionFont = new Font(FontFamily.GenericSansSerif, 10, FontStyle.Bold);
                     }
-                    else if (Core.GetDbWordFromName(w) != null)
+                    else if (Core.words.ContainsKey(w))
                     {
-                        if (Core.GetDbWordFromName(w).Value == 1)
+                        if (Core.words[w] == 1)
                             c = Color.FromArgb(255, 0, 128, 0);
-                        else if (Core.GetDbWordFromName(w).Value == -1)
+                        else if (Core.words[w] == -1)
                             c = Color.FromArgb(255, 128, 0, 0);
-                        else if (Core.GetDbWordFromName(w).Value == 2)
+                        else if (Core.words[w] == 2)
                             c = Color.FromArgb(255, 128, 128, 255);
                         else
                             c = Color.FromArgb(255, 0, 0, 128);
@@ -106,7 +106,7 @@ namespace TesisC
                 tableLayoutPanel.RowCount++;
                 tableLayoutPanel.Controls.Add(new Label() { Text = tw.Author, Padding = new Padding(3) }, 0, tableLayoutPanel.RowCount - 1);
                 tableLayoutPanel.Controls.Add(toAdd, 1, tableLayoutPanel.RowCount - 1);
-                tableLayoutPanel.Controls.Add(new Label() { Text = (tw.Weight - 1) + "", Padding = new Padding(3) }, 2, tableLayoutPanel.RowCount - 1);
+                tableLayoutPanel.Controls.Add(new Label() { Text = tw.RT + "", Padding = new Padding(3) }, 2, tableLayoutPanel.RowCount - 1);
             }
 
 
