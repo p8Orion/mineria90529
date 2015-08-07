@@ -13,6 +13,8 @@ using Gma.CodeCloud.Controls.Geometry;
 using GMap.NET;
 using GMap.NET.WindowsForms;
 using GMap.NET.WindowsForms.Markers;
+using System.Timers;
+using System.Windows.Forms.DataVisualization.Charting;
 
 namespace TesisC
 {
@@ -22,20 +24,20 @@ namespace TesisC
         private BackgroundWorker worker, cloudWorker;
 
         private CloudControl cloud;
+        private bool buildingCloud; // Para no tocar la db
 
         private int sortByCol = 2;
 
         private DbTopic ActiveTopic = null;
         private List<KeyValuePair<DbTopic, AnalysisResults>> resList;
 
-        private bool userMode = false;
-
         private PointLatLng Argentina;
+
+        private System.Timers.Timer ifaceTimer;
 
         public FormMainWindow()
         {
             InitializeComponent();
-            this.tableLayoutPanel1.Enabled = false;
 
             #region CLOUD CONTROL
             try
@@ -47,13 +49,13 @@ namespace TesisC
                 this.cloud.BorderStyle = System.Windows.Forms.BorderStyle.None;
                 this.cloud.Font = new System.Drawing.Font("Verdana", 8, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
                 this.cloud.LayoutType = Gma.CodeCloud.Controls.LayoutType.Spiral;
-                this.cloud.Location = new System.Drawing.Point(0, 0);
+                this.cloud.Location = new System.Drawing.Point(16, 16);
                 this.cloud.BackColor = Color.Beige;
-                this.cloud.MaxFontSize = 32;
+                this.cloud.MaxFontSize = 24;
                 this.cloud.MinFontSize = 8;
                 this.cloud.Name = "cloudControl";
                 this.cloud.Palette = new System.Drawing.Color[] {  System.Drawing.Color.LightGray};
-                this.cloud.Size = new System.Drawing.Size(500, 500);
+                this.cloud.Size = new System.Drawing.Size(484, 500);
                 this.cloud.TabIndex = 6;
                 this.cloud.WeightedWords = null;
                 this.cloud.Click += this.CloudControlClick;
@@ -68,6 +70,7 @@ namespace TesisC
                 Console.Out.WriteLine(e.Message);
             }
             #endregion
+            buildingCloud = false;
 
             core = new Core();
             core.InitListen();
@@ -86,8 +89,6 @@ namespace TesisC
 
             Argentina = new PointLatLng(-40.4, -63.6);
             gMapControl1.Position = Argentina;
-           // gMapControl1.SetPositionByKeywords("Bahia Blanca");
-            
             gMapControl1.Update();
 
             cloudWorker = new BackgroundWorker();
@@ -97,86 +98,117 @@ namespace TesisC
             worker.RunWorkerCompleted += workCompleted;
             worker.RunWorkerAsync();
 
-            UpdateData();
-            
+            ifaceTimer = new System.Timers.Timer();
+            ifaceTimer.Interval = core.TS_quick.TotalMilliseconds;
+            ifaceTimer.Elapsed += new System.Timers.ElapsedEventHandler(OnIFaceTimer);
+            ifaceTimer.SynchronizingObject = this;
+            ifaceTimer.Start();
+
+            this.comboBoxTime.SelectedIndex = 0;
+            UpdateIface();
+        }
+
+        private void OnIFaceTimer(object source, ElapsedEventArgs e)
+        {
+            Console.Out.WriteLine("\n-- IFACE TIMER --");
+            UpdateIface();
         }
 
         private void button1_Click(object sender, EventArgs e)
         {
-            if (userMode)
-            {
-                userMode = false;
-                cloud.Enabled = false;
-                tableLayoutPanel1.Enabled = false;
-                button1.Text = "Actualizando datos. Click para realizar consultas.";
-                worker.RunWorkerAsync();
-                UpdateData();
-            }
-            else if (!userMode)
-            {
-                button1.Enabled = false;
-                button1.Text = "(Esperando finalización de consulta)";
-                userMode = true;
-            }
         }
 
         private void workCompleted(object sender, RunWorkerCompletedEventArgs e)
-        {
-            if (userMode)
-            {
-                button1.Enabled = true;
-                cloud.Enabled = true;
-                tableLayoutPanel1.Enabled = true;
-                button1.Text = "Click para volver a actualizar datos.";
-                UpdateData();
-            }
-            else
-            {
-                worker.RunWorkerAsync();
-                UpdateChart();
-            }
+        {               
+            worker.RunWorkerAsync();
         }
 
         private void button2_Click(object sender, EventArgs e)
         {
-            UpdateData();
+            UpdateIface();
         }
 
-        private void UpdateData()
+        private void UpdateIface()
         {
-            Dictionary<DbTopic, AnalysisResults> res = core.GetTopicsData();
-            resList = res.ToList();
-            UpdateTable();
-            UpdateMap();
-            UpdateChart();
+            if (!buildingCloud)
+            {
+                tableLayoutPanel1.Enabled = false;
+                Dictionary<DbTopic, AnalysisResults> res = core.GetTopicsData();
+                resList = res.ToList();
+                UpdateTable();
+                tableLayoutPanel1.Enabled = true;
+                UpdateMap();
+                UpdateChart();
+            }
         }
 
         private void UpdateChart()
         {
-            
-            chart1.Series.Clear();
-            
-            foreach(DbTopic t in core.GetTopics())
+            try
             {
-                chart1.Series.Add(t.Alias[1]);
-                chart1.Series[t.Alias[1]].ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.FastLine;
-                chart1.Series[t.Alias[1]].BorderWidth = 2;
-            }
+                chart1.Series.Clear();
 
-            IEnumerable<DbTimeBlock> tbs = core.GetTimeBlocks(TimeSpan.FromMinutes(1), 5);
-            int graphTime = -tbs.Count() + 1;
-            chart1.ChartAreas[0].AxisX.Maximum = 0;
-            chart1.ChartAreas[0].AxisX.Minimum = -tbs.Count() + 1;
-
-            foreach (DbTimeBlock tb in tbs)
-            {
+                int topicN = 0;
                 foreach (DbTopic t in core.GetTopics())
                 {
-                    if (tb.TopicAR[t] != null)
-                        chart1.Series[t.Alias[1]].Points.AddXY(graphTime, tb.TopicAR[t].PosVal);
+                    chart1.Series.Add(t.Alias[1]);
+                    chart1.Series[t.Alias[1]].ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.FastLine;
+                    chart1.Series[t.Alias[1]].BorderWidth = 2;
+                    chart1.Series[t.Alias[1]].XValueType = ChartValueType.DateTime;
+                    if (topicN > 10) 
+                        chart1.Series[t.Alias[1]].BorderDashStyle = System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Dash;
+                    topicN++;
+                }               
+               
+                int intervalsToShow = 30;
+                TimeSpan interval = TimeSpan.FromSeconds(0);
+
+                IEnumerable<DbTimeBlock> tbs = null;
+                if(comboBoxTime.SelectedIndex == 0)
+                    interval = core.TS_quick;
+                else if(comboBoxTime.SelectedIndex == 1)
+                    interval = core.TS_short;
+                else if (comboBoxTime.SelectedIndex == 2)
+                    interval = core.TS_medium;
+                else if (comboBoxTime.SelectedIndex == 3)
+                    interval = core.TS_long;
+
+                tbs = core.GetTimeBlocks(interval, intervalsToShow);
+
+                //DateTime graphTime = DateTime.Now.Add(TimeSpan.FromTicks(-(intervalsToShow-1) * interval.Ticks));
+
+                chart1.ChartAreas[0].AxisX.LabelStyle.Format = "MM-dd|HH:mm";
+                //chart1.ChartAreas[0].AxisX.X .XValueType = ChartValueType.DateTime;
+                //chart1.ChartAreas[0].AxisX.IntervalAutoMode = IntervalAutoMode.;
+
+                //chart1.ChartAreas[0].AxisX.Maximum = DateTime.Now;
+                //chart1.ChartAreas[0].AxisX.Minimum = -tbs.Count() + 1;
+
+                foreach (DbTimeBlock tb in tbs)
+                {
+                    foreach (DbTopic t in core.GetTopics())
+                    {
+                        if (tb.TopicAR.ContainsKey(t))
+                        {
+                            if (sortByCol == 2)
+                                chart1.Series[t.Alias[1]].Points.AddXY(tb.Start, tb.TopicAR[t].Popularity);
+                            if (sortByCol == 3)
+                                chart1.Series[t.Alias[1]].Points.AddXY(tb.Start, tb.TopicAR[t].PosVal);
+                            if (sortByCol == 4)
+                                chart1.Series[t.Alias[1]].Points.AddXY(tb.Start, tb.TopicAR[t].NegVal);
+                            if (sortByCol == 5)
+                                chart1.Series[t.Alias[1]].Points.AddXY(tb.Start, tb.TopicAR[t].Ambiguity);
+                        }
+                    }
+                    //graphTime = graphTime.Add(interval);
                 }
-                graphTime++;
+
             }
+            catch (Exception e)
+            {
+                Console.Out.WriteLine("\n@Chart: fallo al cargar datos o dibujar gráfico\n");
+            }
+
         }
 
         private void UpdateMap()
@@ -192,11 +224,23 @@ namespace TesisC
                 try
                 {
                     Console.Out.WriteLine(">>> MAP: " + tw.Coord.Item1 + ", " + tw.Coord.Item2);
-                    gMapControl1.Visible = false;
+                    //gMapControl1.Visible = false;
                     GMarkerGoogle marker = null;
 
                     if (tw.Coord != null)
+                    {
                         marker = new GMarkerGoogle(new PointLatLng(tw.Coord.Item1, tw.Coord.Item2), new Bitmap(core.GetTopicImage(0, core.GetDbTopicFromId(tw.About[0]))));
+                        marker.ToolTip = new GMapToolTip(marker);
+                        marker.ToolTip.Font = new Font(FontFamily.GenericSansSerif, 8);
+                        marker.ToolTipText = tw.Author + "\nen " + tw.Place + "\nPos: " + tw.PosValue + "\nNeg: " + tw.NegValue + "\n\n";
+                        String twText = tw.Text;
+                        while (twText.Length > 20)
+                        {
+                            marker.ToolTipText += twText.Substring(0, 20)+ "\n";
+                            twText = twText.Substring(20);
+                        }
+                        marker.ToolTipText += twText;
+                    }
 
                     markersOverlay.Markers.Add(marker);
                 }
@@ -207,12 +251,13 @@ namespace TesisC
             }
 
             this.gMapControl1.Overlays.Add(markersOverlay);
-            gMapControl1.Visible = true;
+            //gMapControl1.Visible = true;
             gMapControl1.Update();           
         }
 
+
         private void UpdateTable()
-        {
+        {            
             if (sortByCol == 2) resList.Sort((pair1, pair2) => { return -pair1.Value.Popularity.CompareTo(pair2.Value.Popularity); }); // Pop desc
             if (sortByCol == 3) resList.Sort((pair1, pair2) => { return -pair1.Value.PosVal.CompareTo(pair2.Value.PosVal); }); // Pop desc
             if (sortByCol == 4) resList.Sort((pair1, pair2) => { return -pair1.Value.NegVal.CompareTo(pair2.Value.NegVal); }); // Pop desc
@@ -228,6 +273,7 @@ namespace TesisC
             {
                 sortByCol = 2;
                 UpdateTable();
+                UpdateChart();
             };
             tableLayoutPanel1.Controls.Add(bPop, 2, 0);
 
@@ -236,6 +282,7 @@ namespace TesisC
             {
                 sortByCol = 3;
                 UpdateTable();
+                UpdateChart();
             };
             tableLayoutPanel1.Controls.Add(bPos, 3, 0);
 
@@ -244,6 +291,7 @@ namespace TesisC
             {
                 sortByCol = 4;
                 UpdateTable();
+                UpdateChart();
             };
             tableLayoutPanel1.Controls.Add(bNeg, 4, 0);
 
@@ -252,6 +300,7 @@ namespace TesisC
             {
                 sortByCol = 5;
                 UpdateTable();
+                UpdateChart();
             };
             tableLayoutPanel1.Controls.Add(bAmb, 5, 0);
 
@@ -260,9 +309,11 @@ namespace TesisC
             {
                 Button bName = new Button() { Text = item.Key.Alias[1], Width = 200 };
                 bName.Click += (sender, args) => {
-                    
+
+                    buildingCloud = true;
                     ActiveTopic = item.Key;
                     cloud.Enabled = false;
+                    cloudWorker.Dispose();
                     cloudWorker = new BackgroundWorker();
                     cloudWorker.DoWork += (e, a) =>
                     {
@@ -271,9 +322,12 @@ namespace TesisC
                             List<Gma.CodeCloud.Controls.TextAnalyses.Processing.IWord> iwords = new List<Gma.CodeCloud.Controls.TextAnalyses.Processing.IWord>();
 
                             int cantCloudWords = 0;
-                            foreach (var i in item.Value.relevantList)
+                            
+                            // Tomo las palabras relevantes de un tópico porque al armar la tabla sólo había pedido un análisis simple.
+                            List<KeyValuePair<string,double>> relevantList = core.GetTopicTermIntersectionAnalysis(item.Key, "", true).relevantList;
+                            foreach (var i in relevantList)
                             {
-                                if (cantCloudWords >  50) break;
+                                if (cantCloudWords >  30) break;
 
                                 // Si la palabra es el topic de la nube, la saltea.
                                 bool cont = false;
@@ -282,7 +336,7 @@ namespace TesisC
                                         cont = true;
                                 if (cont) continue;
 
-                                AnalysisResults intersection = core.GetTopicTermIntersectionAnalysis(item.Key, i.Key);
+                                AnalysisResults intersection = core.GetTopicTermIntersectionAnalysis(item.Key, i.Key, false);
                                 int neg;
                                 if (intersection == null) neg = 0;
                                 else neg = intersection.NegVal;
@@ -314,6 +368,7 @@ namespace TesisC
                         
                         cloud.Update();
                         cloud.Enabled = true;
+                        buildingCloud = false;
                     };
                     cloudWorker.RunWorkerAsync();
                 };
@@ -398,6 +453,17 @@ namespace TesisC
         private void ButtonPurgeClick(object sender, EventArgs e)
         {
             core.PurgeDB();
+        }
+
+        private void comboBoxTime_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            UpdateChart();
+        }
+
+        private void button1_Click_1(object sender, EventArgs e)
+        {
+            core.PurgeDB();
+            UpdateIface();
         }
 
        

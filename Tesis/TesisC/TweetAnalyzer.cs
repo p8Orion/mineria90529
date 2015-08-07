@@ -47,24 +47,7 @@ namespace TesisC
         }
 
 
-        public AnalysisResults AnalyzeTweetSetLite(IEnumerable<DbTweet> tws)
-        {
-            int posVal = 0;
-            int negVal = 0;
-            int popularity = 0;
-
-            foreach (DbTweet tw in tws)
-            {
-                posVal += tw.PosValue;
-                negVal += tw.NegValue;
-                popularity += 1;
-            }
-
-            return new AnalysisResults(posVal, negVal, 0, popularity, new Dictionary<String,double>());
-        }
-
-
-        public AnalysisResults AnalyzeTweetSet(IEnumerable<DbTweet> tws)
+        public AnalysisResults AnalyzeTweetSet(IEnumerable<DbTweet> tws, bool lite)
         {
             Dictionary<String, int> termAppearances = new Dictionary<String, int>();
             Dictionary<String, double> relevantTerms = new Dictionary<String, double>();
@@ -73,7 +56,7 @@ namespace TesisC
             int popularity = 0;
             float ambiguity = 0;
             int ambiguityOver = 0; // Para ignorar los tweets sin positivos ni negativos en este cálculo.
-            int ct = tws.Count();
+            //int ct = tws.Count();
 
             try
             {
@@ -86,6 +69,7 @@ namespace TesisC
                     }
                     popularity += 1;
 
+                    if(!lite)
                     foreach(String term in tw.Terms) {
                         if (termAppearances.ContainsKey(term)) termAppearances[term]++;
                         else termAppearances[term] = 1;
@@ -100,6 +84,7 @@ namespace TesisC
             if(ambiguityOver>0)
                 ambiguity = ambiguity/ambiguityOver;
          
+            if(!lite)
             foreach (var item in termAppearances)
             {
                 try

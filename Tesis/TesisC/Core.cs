@@ -29,6 +29,11 @@ namespace TesisC
         public const int Domain_nacion = 1;
         public const int Domain_provincia = 2;
 
+        public TimeSpan TS_quick = TimeSpan.FromSeconds(60);
+        public TimeSpan TS_short = TimeSpan.FromMinutes(5);
+        public TimeSpan TS_medium = TimeSpan.FromHours(1); 
+        public TimeSpan TS_long = TimeSpan.FromDays(1);
+
         // Base de datos
         private String dbName = "polArg";
         private IObjectContainer db;
@@ -36,11 +41,11 @@ namespace TesisC
         private IFilteredStream myStream;
 
         private int cantTweets;
-        private int maxCantTweets = 20;
+        private int maxCantTweets = 50;
 
         private TweetAnalyzer TA;
 
-        private System.Timers.Timer blockTimer;
+        private System.Timers.Timer blockTimer, quickBlockTimer;
 
         public Dictionary<String, int> words { get; private set; }
 
@@ -56,26 +61,40 @@ namespace TesisC
             InitWords();
 
             TA = new TweetAnalyzer(db, this);
+
             blockTimer = new System.Timers.Timer();
-            blockTimer.Interval = 1000 * 60;
+            blockTimer.Interval = TS_short.TotalMilliseconds;
             blockTimer.Elapsed += new System.Timers.ElapsedEventHandler(OnBlockTimer);
-            blockTimer.Start();
+
+            quickBlockTimer = new System.Timers.Timer();
+            quickBlockTimer.Interval = TS_quick.TotalMilliseconds;
+            quickBlockTimer.Elapsed += new System.Timers.ElapsedEventHandler(OnQuickBlockTimer);
         }
 
 
         public void StartStream(object sndr, DoWorkEventArgs e)
         {
             cantTweets = 0;
-            myStream.StartStreamMatchingAnyCondition();            
+            myStream.StartStreamMatchingAnyCondition();
+
+            blockTimer.Start();
+            quickBlockTimer.Start();
         }
 
         public Image GetTopicImage(int size, DbTopic t)
         {
+            Image im = null;
+            
             if (size == 0)
-            {
-                if(t.Image[0] == null)
-                    t.Image[0] = Image.FromStream(Tweetinvi.User.GetProfileImageStream(Tweetinvi.User.GetUserFromScreenName(t.Alias[1]), Tweetinvi.Core.Enum.ImageSize.mini));
-                return t.Image[0];
+            {            
+                if(File.Exists(t.Id+"_0"))
+                    im = Image.FromFile(t.Id+"_0");
+                if (im == null)
+                {
+                    im = Image.FromStream(Tweetinvi.User.GetProfileImageStream(Tweetinvi.User.GetUserFromScreenName(t.Alias[1]), Tweetinvi.Core.Enum.ImageSize.mini));
+                    im.Save(t.Id + "_0");
+                }
+                return im;
             }
             else if (size == 1)
             {
@@ -119,47 +138,80 @@ namespace TesisC
         // Devuelve sólo los intervalos de cierto ancho, ordenados de más viejo a más nuevo
         public IEnumerable<DbTimeBlock> GetTimeBlocks(TimeSpan intervalSize, int amount)
         {
+            /* Versión getLatest...
+            List<DbTimeBlock> toRet = new List<DbTimeBlock>();
+       
+            for (int i = 1; i <= amount; i++)
+            {
+                TimeSpan tsi = TimeSpan.FromTicks(-intervalSize.Ticks * i);
+                IEnumerable<DbTimeBlock> tbs = from DbTimeBlock tb in db
+                                               where tb.Length.CompareTo(intervalSize) == 0 &&
+                                                  tb.Start.Add(tsi).CompareTo(DateTime.Now.Add(tsi)) < 0 &&
+                                                  tb.Start.Add(tsi).Add(intervalSize).CompareTo(DateTime.Now.Add(tsi)) >= 0
+                                               select tb;
+
+                toRet.Add(tbs.FirstOrDefault());
+            }*/
+
+            TimeSpan tsamount = TimeSpan.FromTicks(intervalSize.Ticks * (amount+1));
             IEnumerable<DbTimeBlock> toRet = from DbTimeBlock tb in db
-                   where tb.Length.CompareTo(intervalSize) == 0
+                   where (tb.Length.CompareTo(intervalSize) == 0) && tb.Start.Add(tsamount).CompareTo(DateTime.Now) > 0 // i.e. empezó hace menos de amount+1 intervalos.
                    orderby tb.Start descending
                    select tb;
-
+            
             if (toRet.Count() > amount)
                 toRet = toRet.Take(amount);
-            
+
             return toRet.Reverse();
         }
 
         private void OnBlockTimer(object source, ElapsedEventArgs e)
         {
-            BuildTimeBlock();
+            BuildTimeBlock(false, this.TS_short);
+            PurgeDB();
+        }
+
+        private void OnQuickBlockTimer(object source, ElapsedEventArgs e)
+        {
+            BuildTimeBlock(true, this.TS_quick);
         }
 
         // Último minuto
-        public DbTimeBlock BuildTimeBlock()
+        public DbTimeBlock BuildTimeBlock(bool quick, TimeSpan length)
         {
-            IEnumerable<DbTweet> globalToProc = GetTweetsInTimeInterval(DateTime.Now.AddMinutes(-1), DateTime.Now, null);
-            AnalysisResults globalAR = TA.AnalyzeTweetSet(globalToProc);
+            IEnumerable<DbTweet> globalToProc = GetTweetsInTimeInterval(DateTime.Now.Add(-length), DateTime.Now, null);
+
+            AnalysisResults globalAR = null;
+            if(quick)
+                globalAR = TA.AnalyzeTweetSet(globalToProc, true);
+            else
+                globalAR = TA.AnalyzeTweetSet(globalToProc, false);
 
             Dictionary<DbTopic, AnalysisResults> allTopicsAR = new Dictionary<DbTopic, AnalysisResults>();
             foreach (DbTopic t in db.Query<DbTopic>())
             {
-                IEnumerable<DbTweet> topicToProc = GetTweetsInTimeInterval(DateTime.Now.AddMinutes(-1), DateTime.Now, t);
-                AnalysisResults topicAR = TA.AnalyzeTweetSet(topicToProc);
+                IEnumerable<DbTweet> topicToProc = GetTweetsInTimeInterval(DateTime.Now.Add(-length), DateTime.Now, t);
+
+                AnalysisResults topicAR = null;
+                if(quick)
+                    topicAR = TA.AnalyzeTweetSet(topicToProc, true);
+                else
+                    topicAR = TA.AnalyzeTweetSet(topicToProc, false);
+
                 allTopicsAR.Add(t, topicAR);
             }
 
-            DbTimeBlock toRet = new DbTimeBlock(DateTime.Now.AddMinutes(-1), TimeSpan.FromMinutes(1), globalAR, allTopicsAR);
+            DbTimeBlock toRet = new DbTimeBlock(DateTime.Now.Add(-length), length, globalAR, allTopicsAR); 
             db.Store(toRet);
 
-            Console.Out.WriteLine("\n\n[ BUILT TIME BLOCK ]\n");
+            Console.Out.WriteLine("\n\n[ BUILT TIME BLOCK, quick: "+quick+"+ ]\n");
             return toRet;
         }
 
 
         public void PurgeDB()
         {
-            IEnumerable<DbTweet> toRemove = GetTweetsInTimeInterval(DateTime.Now.AddDays(-1), DateTime.Now.AddMinutes(-1), null); //test, iría -30 o -1 hora, no?
+            IEnumerable<DbTweet> toRemove = GetTweetsInTimeInterval(DateTime.MinValue, DateTime.Now.Add(this.TS_short), null);
 
             Console.Out.WriteLine("[ DATABASE CLEANUP START ]");
 
@@ -294,12 +346,13 @@ namespace TesisC
             return null;
         }
 
-        public AnalysisResults GetTopicTermIntersectionAnalysis(DbTopic t, String term)
+        public AnalysisResults GetTopicTermIntersectionAnalysis(DbTopic t, String term, bool detailed)
         {
             IEnumerable<DbTweet> tws = GetTopicTermIntersectionTweets(t, term);
 
             if (tws != null)
-                return TA.AnalyzeTweetSetLite(tws);
+                if (detailed) return TA.AnalyzeTweetSet(tws, false);
+                else return TA.AnalyzeTweetSet(tws, true);
             else
                 return null;
         }
@@ -319,8 +372,8 @@ namespace TesisC
                     IEnumerable<DbTweet> tws2 = from DbTweet tw in db
                                                 where tw.About.Contains(tp.Id) 
                                                 select tw;
-                    Console.Out.Write("\n\nResultados para " + tp.Id + ": ");
-                    AnalysisResults AR = TA.AnalyzeTweetSet(tws2);
+                    Console.Out.WriteLine("Resultados para " + tp.Id + ": ");
+                    AnalysisResults AR = TA.AnalyzeTweetSet(tws2, true);
                     toRet.Add(tp, AR);
                     AR.Display();
                 }
@@ -404,7 +457,7 @@ namespace TesisC
                 DbTweet n;
                 if (existente != null && existente.Count() == 0)
                 {
-                    n = new DbTweet(arg.Id, arg.Text, arg.CreatedBy.UserIdentifier.ScreenName, arg.CreatedAt, DateTime.Now, arg.RetweetCount);      
+                    n = new DbTweet(arg.Id, arg.Text, arg.CreatedBy.UserIdentifier.ScreenName, arg.CreatedAt, DateTime.Now, arg.RetweetCount, arg.Place.FullName);      
                 }
                 else
                 {
