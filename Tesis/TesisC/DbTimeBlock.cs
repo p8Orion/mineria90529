@@ -12,6 +12,7 @@ namespace TesisC
         public Dictionary<DbTopic, AnalysisResults> TopicAR { get; private set; }
         public DateTime Start { get; private set; }
         public TimeSpan Length { get; private set; }
+        public bool Used { get; set; } // Usado como parte de un bloque más grande
 
         // Construye un bloque a partir de los últimos 5 minutos
         public DbTimeBlock(DateTime start, TimeSpan length, AnalysisResults globalAR, Dictionary<DbTopic, AnalysisResults> topicAR)
@@ -20,6 +21,7 @@ namespace TesisC
             this.Length = length;
             this.GlobalAR = globalAR;
             this.TopicAR = topicAR;
+            this.Used = false;  
         }
     }
 }

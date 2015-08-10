@@ -232,7 +232,7 @@ namespace TesisC
                         marker = new GMarkerGoogle(new PointLatLng(tw.Coord.Item1, tw.Coord.Item2), new Bitmap(core.GetTopicImage(0, core.GetDbTopicFromId(tw.About[0]))));
                         marker.ToolTip = new GMapToolTip(marker);
                         marker.ToolTip.Font = new Font(FontFamily.GenericSansSerif, 8);
-                        marker.ToolTipText = tw.Author + "\nen " + tw.Place + "\nPos: " + tw.PosValue + "\nNeg: " + tw.NegValue + "\n\n";
+                        marker.ToolTipText = tw.Author + "\nPos: " + tw.PosValue + "\nNeg: " + tw.NegValue + "\n\n";
                         String twText = tw.Text;
                         while (twText.Length > 20)
                         {
@@ -240,6 +240,7 @@ namespace TesisC
                             twText = twText.Substring(20);
                         }
                         marker.ToolTipText += twText;
+                        //marker.Offset = new Point(10, 10);
                     }
 
                     markersOverlay.Markers.Add(marker);

@@ -30,9 +30,13 @@ namespace TesisC
         public const int Domain_provincia = 2;
 
         public TimeSpan TS_quick = TimeSpan.FromSeconds(60);
-        public TimeSpan TS_short = TimeSpan.FromMinutes(5);
-        public TimeSpan TS_medium = TimeSpan.FromHours(1); 
-        public TimeSpan TS_long = TimeSpan.FromDays(1);
+        //public TimeSpan TS_short = TimeSpan.FromMinutes(5);
+        //public TimeSpan TS_medium = TimeSpan.FromHours(1); 
+        //public TimeSpan TS_long = TimeSpan.FromDays(1);
+        public TimeSpan TS_short = TimeSpan.FromSeconds(5);
+        public TimeSpan TS_medium = TimeSpan.FromSeconds(25);
+        public TimeSpan TS_long = TimeSpan.FromSeconds(125);
+        private int TimeBlockConsolidationThreshold = 5;
 
         // Base de datos
         private String dbName = "polArg";
@@ -45,7 +49,7 @@ namespace TesisC
 
         private TweetAnalyzer TA;
 
-        private System.Timers.Timer blockTimer, quickBlockTimer;
+        private System.Timers.Timer longBlockTimer, mediumBlockTimer, shortBlockTimer, quickBlockTimer;
 
         public Dictionary<String, int> words { get; private set; }
 
@@ -62,9 +66,17 @@ namespace TesisC
 
             TA = new TweetAnalyzer(db, this);
 
-            blockTimer = new System.Timers.Timer();
-            blockTimer.Interval = TS_short.TotalMilliseconds;
-            blockTimer.Elapsed += new System.Timers.ElapsedEventHandler(OnBlockTimer);
+            mediumBlockTimer = new System.Timers.Timer();
+            mediumBlockTimer.Interval = TS_medium.TotalMilliseconds;
+            mediumBlockTimer.Elapsed += new System.Timers.ElapsedEventHandler(OnMediumBlockTimer);
+            
+            longBlockTimer = new System.Timers.Timer();
+            longBlockTimer.Interval = TS_long.TotalMilliseconds;
+            longBlockTimer.Elapsed += new System.Timers.ElapsedEventHandler(OnLongBlockTimer);
+
+            shortBlockTimer = new System.Timers.Timer();
+            shortBlockTimer.Interval = TS_short.TotalMilliseconds;
+            shortBlockTimer.Elapsed += new System.Timers.ElapsedEventHandler(OnShortBlockTimer);
 
             quickBlockTimer = new System.Timers.Timer();
             quickBlockTimer.Interval = TS_quick.TotalMilliseconds;
@@ -77,8 +89,10 @@ namespace TesisC
             cantTweets = 0;
             myStream.StartStreamMatchingAnyCondition();
 
-            blockTimer.Start();
+            shortBlockTimer.Start();
             quickBlockTimer.Start();
+            mediumBlockTimer.Start();
+            longBlockTimer.Start();
         }
 
         public Image GetTopicImage(int size, DbTopic t)
@@ -165,19 +179,28 @@ namespace TesisC
             return toRet.Reverse();
         }
 
-        private void OnBlockTimer(object source, ElapsedEventArgs e)
+        private void OnShortBlockTimer(object source, ElapsedEventArgs e)
         {
-            BuildTimeBlock(false, this.TS_short);
-            PurgeDB();
+            BuildTimeBlockFromTweets(false, this.TS_short);
+        }
+
+        private void OnMediumBlockTimer(object source, ElapsedEventArgs e)
+        {
+            BuildTimeBlockFromBlocks(this.TS_medium);
+        }
+
+        private void OnLongBlockTimer(object source, ElapsedEventArgs e)
+        {
+            BuildTimeBlockFromBlocks(this.TS_long);
         }
 
         private void OnQuickBlockTimer(object source, ElapsedEventArgs e)
         {
-            BuildTimeBlock(true, this.TS_quick);
+            BuildTimeBlockFromTweets(true, this.TS_quick);
         }
 
-        // Último minuto
-        public DbTimeBlock BuildTimeBlock(bool quick, TimeSpan length)
+        // Construye bloques de último momento (sin detalle, quick), o pequeños, basados en tweets (i.e. no en otros bloques menores).
+        public DbTimeBlock BuildTimeBlockFromTweets(bool quick, TimeSpan length)
         {
             IEnumerable<DbTweet> globalToProc = GetTweetsInTimeInterval(DateTime.Now.Add(-length), DateTime.Now, null);
 
@@ -205,7 +228,86 @@ namespace TesisC
             db.Store(toRet);
 
             Console.Out.WriteLine("\n\n[ BUILT TIME BLOCK, quick: "+quick+"+ ]\n");
+
             return toRet;
+        }
+
+        // Construye bloques medianos o grandes, basados en bloques chicos o medianos respectivamente.
+        public void BuildTimeBlockFromBlocks(TimeSpan length)
+        {
+            TimeSpan childBlocksLength = TimeSpan.FromSeconds(0);
+            if (length == TS_medium)
+                childBlocksLength = TS_short;
+            else if (length == TS_long)
+                childBlocksLength = TS_medium;
+
+            IEnumerable<DbTimeBlock> ch = from DbTimeBlock t in db
+                                         where t.Length == childBlocksLength && t.Used == false
+                                         orderby t.Start descending
+                                         select t;
+            int cant = ch.Count();
+            AnalysisResults GlobalAR = new AnalysisResults();
+            Dictionary<DbTopic, AnalysisResults> TopicAR = new Dictionary<DbTopic, AnalysisResults>();
+            foreach (DbTopic t in db.Query<DbTopic>())
+                TopicAR.Add(t, new AnalysisResults());
+
+            if (cant > this.TimeBlockConsolidationThreshold)
+            {
+                foreach (DbTimeBlock cht in ch)
+                {
+                    GlobalAR.Popularity += cht.GlobalAR.Popularity;
+                    GlobalAR.PosVal += cht.GlobalAR.PosVal;
+                    GlobalAR.NegVal += cht.GlobalAR.NegVal;
+                    GlobalAR.Ambiguity += cht.GlobalAR.Ambiguity;
+
+                    // Para poder comparar las palabras importantes de un subbloque con otro, ya que cada uno fue calculado con tfidf distintos.
+                    double normalizationFactor = 0;
+                    foreach(KeyValuePair<string,double> kv in cht.GlobalAR.relevantList)
+                        normalizationFactor += kv.Value;
+
+                    foreach(KeyValuePair<string,double> kv in cht.GlobalAR.relevantList)
+                        if(GlobalAR.RelevantTerms.ContainsKey(kv.Key))
+                            GlobalAR.RelevantTerms[kv.Key] += kv.Value/normalizationFactor;
+                        else
+                            GlobalAR.RelevantTerms[kv.Key] = kv.Value/normalizationFactor;
+
+                    // ídem a lo anterior, para cada topic
+                    foreach (KeyValuePair<DbTopic, AnalysisResults> tar in cht.TopicAR)
+                    {
+                        TopicAR[tar.Key].Popularity += tar.Value.Popularity;
+                        TopicAR[tar.Key].PosVal += tar.Value.PosVal;
+                        TopicAR[tar.Key].NegVal += tar.Value.NegVal;
+                        TopicAR[tar.Key].Ambiguity += tar.Value.Ambiguity;     
+                  
+                        normalizationFactor = 0;
+                        foreach(KeyValuePair<string,double> kv in cht.TopicAR[tar.Key].relevantList)
+                            normalizationFactor += kv.Value;
+
+                        foreach(KeyValuePair<string,double> kv in cht.TopicAR[tar.Key].relevantList)
+                            if(TopicAR[tar.Key].RelevantTerms.ContainsKey(kv.Key))
+                                TopicAR[tar.Key].RelevantTerms[kv.Key] += kv.Value/normalizationFactor;
+                            else
+                                TopicAR[tar.Key].RelevantTerms[kv.Key] = kv.Value / normalizationFactor;
+                    }
+
+                    cht.Used = true;
+                    db.Store(cht);
+                }
+              
+                GlobalAR.Ambiguity /= cant;
+                GlobalAR.DictionaryToList();
+
+                foreach (DbTopic t in db.Query<DbTopic>())
+                {
+                    TopicAR[t].Ambiguity /= cant;
+                    TopicAR[t].DictionaryToList();
+                }
+
+                DbTimeBlock toAdd = new DbTimeBlock(DateTime.Now.Add(-length), length, GlobalAR, TopicAR);
+                db.Store(toAdd);
+
+                Console.Out.WriteLine("\n\n[ BUILT TIME BLOCK FROM SMALL BLOCKS, size: " + length +"+ ]\n");
+            }   
         }
 
 
@@ -457,7 +559,7 @@ namespace TesisC
                 DbTweet n;
                 if (existente != null && existente.Count() == 0)
                 {
-                    n = new DbTweet(arg.Id, arg.Text, arg.CreatedBy.UserIdentifier.ScreenName, arg.CreatedAt, DateTime.Now, arg.RetweetCount, arg.Place.FullName);      
+                    n = new DbTweet(arg.Id, arg.Text, arg.CreatedBy.UserIdentifier.ScreenName, arg.CreatedAt, DateTime.Now, arg.RetweetCount);      
                 }
                 else
                 {

@@ -24,9 +24,8 @@ namespace TesisC
         public List<String> About { get; private set; } // Ids de DbTopic
         public List<String> Terms { get; private set; } // Palabras
         public Tuple<float, float> Coord { get; set; } // Coordenadas geoloc
-        public String Place { get; set; } // Place geoloc
 
-        public DbTweet(long id, String text, String author, DateTime publish, DateTime added, int rt, string place)
+        public DbTweet(long id, String text, String author, DateTime publish, DateTime added, int rt)
         {
             this.Id = id;
             this.Text = text;
@@ -36,7 +35,6 @@ namespace TesisC
             this.RT = rt;
             this.About = new List<String>();
             this.Terms = new List<String>();
-            this.Place = place;
             this.Coord = null;
         }
     }
