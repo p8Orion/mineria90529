@@ -26,6 +26,10 @@ namespace TesisC
         private CloudControl cloud;
         private bool buildingCloud; // Para no tocar la db
 
+        private bool mapInit; // Mapa inicializado?
+        
+        private bool inetWarningFlag = true; // Hay que advertir sobre la conexión a Internet? (para no insistir)
+
         private int sortByCol = 2;
 
         private DbTopic ActiveTopic = null;
@@ -83,14 +87,10 @@ namespace TesisC
             pi.SetValue(tableLayoutPanel1, true, null);
 
             // Map
-            gMapControl1.MapProvider = GMap.NET.MapProviders.BingHybridMapProvider.Instance;
-            gMapControl1.Zoom = 4;
-            GMap.NET.GMaps.Instance.Mode = GMap.NET.AccessMode.ServerAndCache;
-
+            mapInit = false;
             Argentina = new PointLatLng(-40.4, -63.6);
-            gMapControl1.Position = Argentina;
-            gMapControl1.Update();
-
+            InitMap();
+   
             cloudWorker = new BackgroundWorker();
 
             worker = new BackgroundWorker();
@@ -105,7 +105,6 @@ namespace TesisC
             ifaceTimer.Start();
 
             this.comboBoxTime.SelectedIndex = 0;
-            UpdateIface();
         }
 
         private void OnIFaceTimer(object source, ElapsedEventArgs e)
@@ -123,13 +122,44 @@ namespace TesisC
             worker.RunWorkerAsync();
         }
 
-        private void button2_Click(object sender, EventArgs e)
+        private void InitMap()
         {
-            UpdateIface();
+            try
+            {
+                gMapControl1.MapProvider = GMap.NET.MapProviders.BingHybridMapProvider.Instance;
+                gMapControl1.Zoom = 4;
+                GMap.NET.GMaps.Instance.Mode = GMap.NET.AccessMode.ServerAndCache;
+         
+                gMapControl1.Position = Argentina;
+                gMapControl1.ReloadMap();
+                mapInit = !(gMapControl1.MapProvider.Area == null);
+                gMapControl1.Update();
+            }
+            catch (Exception e)
+            {
+                mapInit = false;
+            }
         }
 
         private void UpdateIface()
         {
+            if (!core.CheckForInternetConnection())
+            {
+                if (inetWarningFlag)
+                {
+                    MessageBox.Show("No se ha encontrado una conexión a Internet, o se ha perdido. La aplicación intentará continuar al recuperarla.",
+                        "Advertencia",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+
+                    inetWarningFlag = false;
+                }
+            }
+            else
+            {
+                inetWarningFlag = true;
+            }
+
             if (!buildingCloud)
             {
                 tableLayoutPanel1.Enabled = false;
@@ -213,6 +243,10 @@ namespace TesisC
 
         private void UpdateMap()
         {
+
+            if (!mapInit)
+                InitMap();
+
             gMapControl1.Overlays.Clear();
             GMapOverlay markersOverlay = new GMapOverlay("markers");
             this.gMapControl1.Overlays.Add(markersOverlay);
@@ -426,7 +460,7 @@ namespace TesisC
 
         private void Form1_Load(object sender, EventArgs e)
         {
-
+            UpdateIface();
         }
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)

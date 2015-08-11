@@ -19,6 +19,7 @@ using Db4objects.Db4o.Config;
 using Db4objects.Db4o.Linq;
 using Db4objects.Db4o.Config.Encoding;
 using System.Timers;
+using System.Net;
 
 
 namespace TesisC
@@ -29,7 +30,7 @@ namespace TesisC
         public const int Domain_nacion = 1;
         public const int Domain_provincia = 2;
 
-        public TimeSpan TS_quick = TimeSpan.FromSeconds(60);
+        public TimeSpan TS_quick = TimeSpan.FromSeconds(15);
         //public TimeSpan TS_short = TimeSpan.FromMinutes(5);
         //public TimeSpan TS_medium = TimeSpan.FromHours(1); 
         //public TimeSpan TS_long = TimeSpan.FromDays(1);
@@ -112,15 +113,25 @@ namespace TesisC
             }
             else if (size == 1)
             {
-                if (t.Image[1] == null)
-                    t.Image[1] = Image.FromStream(Tweetinvi.User.GetProfileImageStream(Tweetinvi.User.GetUserFromScreenName(t.Alias[1]), Tweetinvi.Core.Enum.ImageSize.normal));
-                return t.Image[1];
+                if (File.Exists(t.Id + "_1"))
+                    im = Image.FromFile(t.Id + "_1");
+                if (im == null)
+                {
+                    im = Image.FromStream(Tweetinvi.User.GetProfileImageStream(Tweetinvi.User.GetUserFromScreenName(t.Alias[1]), Tweetinvi.Core.Enum.ImageSize.normal));
+                    im.Save(t.Id + "_1");
+                }
+                return im;
             }
             else
             {
-                if (t.Image[2] == null)
-                    t.Image[2] = Image.FromStream(Tweetinvi.User.GetProfileImageStream(Tweetinvi.User.GetUserFromScreenName(t.Alias[1]), Tweetinvi.Core.Enum.ImageSize.bigger));
-                return t.Image[2];
+                if (File.Exists(t.Id + "_2"))
+                    im = Image.FromFile(t.Id + "_2");
+                if (im == null)
+                {
+                    im = Image.FromStream(Tweetinvi.User.GetProfileImageStream(Tweetinvi.User.GetUserFromScreenName(t.Alias[1]), Tweetinvi.Core.Enum.ImageSize.bigger));
+                    im.Save(t.Id + "_2");
+                }
+                return im;
             }
         }
 
@@ -622,6 +633,24 @@ namespace TesisC
             }
         }
 
+
+        public bool CheckForInternetConnection()
+        {
+            try
+            {
+                using (var client = new WebClient())
+                {
+                    using (var stream = client.OpenRead("http://www.google.com"))
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         public void Dispose()
         {
