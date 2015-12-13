@@ -143,28 +143,6 @@ namespace TesisC
                     }
                     else if (wordValue == 1) tw.PosValue++; // Palabra positiva
                     else if (wordValue == -1) tw.NegValue++; // Palabra negativa
-                     /* // Acumula DEMASIADOS (ej. #hashtags) y no sirve
-                    else // Caso en que la palabra es el alias de un topic.
-                    {
-                        IEnumerable<DbTopic> tps = from DbTopic t in db
-                                                    select t;
-                        
-                        DbTopic isTopic = null;
-                        foreach (DbTopic tp in tps)
-                        {
-                            foreach (String a in tp.Alias)
-                                if (w.ToLower().Contains(a.ToLower()))
-                                {
-                                    isTopic = tp;
-                                    break;
-                                }
-                        }
-                        if (isTopic != null && !isTopic.Alias.Contains(w.ToLower()))
-                        {
-                            isTopic.Alias.Add(w.ToLower());
-                            Console.Out.WriteLine("Agregado " + w.ToLower() + " como topic a " + isTopic.Id);
-                        }
-                    }*/
 
                     if (!stopword && w != "")
                     {

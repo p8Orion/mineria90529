@@ -39,6 +39,8 @@ namespace TesisC
 
         private void ShowTweets()
         {
+            this.pictureBox1.Image = Core.GetTopicImage(2, About);
+
             List<DbTweet> TweetList = TweetSet.ToList();
 
             if (Selection != SelectionWordRelated) // No se muestran los tweets relacionados con una palabra, sino los que cumplen con cierta característica.
@@ -69,9 +71,11 @@ namespace TesisC
                 }
             }
 
+            //tableLayoutPanel.RowStyles[0].Height = 24;
+
             foreach (DbTweet tw in TweetList)
             {
-                RichTextBox toAdd = new RichTextBox() { Font = new Font(FontFamily.GenericSansSerif, 10, FontStyle.Regular), Width = 500, AutoSize = true, Padding = new Padding(3) };
+                RichTextBox toAdd = new RichTextBox() { Font = new Font(FontFamily.GenericSansSerif, 10, FontStyle.Regular), Width = 400, Height = 80, Padding = new Padding(3) };
 
                 toAdd.Enabled = false;
                 toAdd.ForeColor = Color.FromArgb(50, 50, 50);
@@ -106,17 +110,22 @@ namespace TesisC
                 tableLayoutPanel.RowCount++;
                 tableLayoutPanel.Controls.Add(new Label() { Text = tw.Author, Padding = new Padding(3) }, 0, tableLayoutPanel.RowCount - 1);
                 tableLayoutPanel.Controls.Add(toAdd, 1, tableLayoutPanel.RowCount - 1);
-                tableLayoutPanel.Controls.Add(new Label() { Text = tw.RT + "", Padding = new Padding(3) }, 2, tableLayoutPanel.RowCount - 1);
+                //tableLayoutPanel.Controls.Add(new Label() { Text = tw.RT + "", Padding = new Padding(3) }, 2, tableLayoutPanel.RowCount - 1);
+
+                tableLayoutPanel.Height += toAdd.Height;
             }
 
-
-            tableLayoutPanel.RowStyles[0].Height = 32;
             tableLayoutPanel.Update();
         }
 
         private void button1_Click(object sender, EventArgs e)
         {
             this.Dispose();
+        }
+
+        private void FormTweets_Load(object sender, EventArgs e)
+        {
+
         }
     }
 }

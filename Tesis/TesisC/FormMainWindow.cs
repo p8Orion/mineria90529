@@ -109,7 +109,7 @@ namespace TesisC
 
         private void OnIFaceTimer(object source, ElapsedEventArgs e)
         {
-            Console.Out.WriteLine("\n-- IFACE TIMER --");
+            Console.Out.WriteLine("\n-- TIMER INTERFACE --");
             UpdateIface();
         }
 
@@ -133,6 +133,9 @@ namespace TesisC
                 gMapControl1.Position = Argentina;
                 gMapControl1.ReloadMap();
                 mapInit = !(gMapControl1.MapProvider.Area == null);
+
+                gMapControl1.OnMarkerEnter += new MarkerEnter(this.gMapControl_MarkerEnter);
+
                 gMapControl1.Update();
             }
             catch (Exception e)
@@ -208,11 +211,6 @@ namespace TesisC
                 //DateTime graphTime = DateTime.Now.Add(TimeSpan.FromTicks(-(intervalsToShow-1) * interval.Ticks));
 
                 chart1.ChartAreas[0].AxisX.LabelStyle.Format = "MM-dd|HH:mm";
-                //chart1.ChartAreas[0].AxisX.X .XValueType = ChartValueType.DateTime;
-                //chart1.ChartAreas[0].AxisX.IntervalAutoMode = IntervalAutoMode.;
-
-                //chart1.ChartAreas[0].AxisX.Maximum = DateTime.Now;
-                //chart1.ChartAreas[0].AxisX.Minimum = -tbs.Count() + 1;
 
                 foreach (DbTimeBlock tb in tbs)
                 {
@@ -266,14 +264,14 @@ namespace TesisC
                         marker = new GMarkerGoogle(new PointLatLng(tw.Coord.Item1, tw.Coord.Item2), new Bitmap(core.GetTopicImage(0, core.GetDbTopicFromId(tw.About[0]))));
                         marker.ToolTip = new GMapToolTip(marker);
                         marker.ToolTip.Font = new Font(FontFamily.GenericSansSerif, 8);
-                        marker.ToolTipText = tw.Author + "\nPos: " + tw.PosValue + "\nNeg: " + tw.NegValue + "\n\n";
+                        marker.ToolTipText = tw.Author + "\nPos: " + tw.PosValue + " - Neg: " + tw.NegValue + "\n\n";
                         String twText = tw.Text;
-                        while (twText.Length > 20)
+                        while (twText.Length > 40)
                         {
-                            marker.ToolTipText += twText.Substring(0, 20)+ "\n";
-                            twText = twText.Substring(20);
+                            marker.Tag += twText.Substring(0, 40)+ "\n";
+                            twText = twText.Substring(40);
                         }
-                        marker.ToolTipText += twText;
+                        marker.Tag += twText;
                         //marker.Offset = new Point(10, 10);
                     }
 
@@ -342,6 +340,14 @@ namespace TesisC
             int row = 1;
             foreach (var item in resList)
             {
+                PictureBox bDominio = new PictureBox();
+                bDominio.Image = Image.FromFile("Dom" + item.Key.Domain + ".png");
+                bDominio.Size = new Size(20,20);
+                bDominio.Anchor = AnchorStyles.None;
+                tableLayoutPanel1.Controls.Add(bDominio, 0, row);
+                
+
+
                 Button bName = new Button() { Text = item.Key.Alias[1], Width = 200 };
                 bName.Click += (sender, args) => {
 
@@ -501,7 +507,12 @@ namespace TesisC
             UpdateIface();
         }
 
-       
+        private void gMapControl_MarkerEnter(GMapMarker item)
+        {
+            labelTooltip.Text = item.ToolTipText;
+            labelTooltip.Text += item.Tag;
+        }
+
     }
 
 }

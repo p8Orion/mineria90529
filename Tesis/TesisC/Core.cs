@@ -34,9 +34,9 @@ namespace TesisC
         //public TimeSpan TS_short = TimeSpan.FromMinutes(5);
         //public TimeSpan TS_medium = TimeSpan.FromHours(1); 
         //public TimeSpan TS_long = TimeSpan.FromDays(1);
-        public TimeSpan TS_short = TimeSpan.FromSeconds(5);
-        public TimeSpan TS_medium = TimeSpan.FromSeconds(25);
-        public TimeSpan TS_long = TimeSpan.FromSeconds(125);
+        public TimeSpan TS_short = TimeSpan.FromMinutes(3);
+        public TimeSpan TS_medium = TimeSpan.FromHours(1);
+        public TimeSpan TS_long = TimeSpan.FromHours(24);
         private int TimeBlockConsolidationThreshold = 5;
 
         // Base de datos
@@ -59,7 +59,7 @@ namespace TesisC
             // Base de datos
             IEmbeddedConfiguration config = Db4oEmbedded.NewConfiguration();
             config.Common.UpdateDepth = 3;  // Para almancenar objetos anidados (listas, etc.) en DB.  
-            //config.Common.StringEncoding = StringEncodings.Utf8();   // Esto ahorra MUCHO espacio
+            //config.Common.StringEncoding = StringEncodings.Utf8();   // Esto ahorra mucho espacio pero genera dificultades
             db = Db4oEmbedded.OpenFile(config, dbName);
 
             words = new Dictionary<string, int>();
@@ -203,6 +203,7 @@ namespace TesisC
         private void OnLongBlockTimer(object source, ElapsedEventArgs e)
         {
             BuildTimeBlockFromBlocks(this.TS_long);
+            PurgeDB();
         }
 
         private void OnQuickBlockTimer(object source, ElapsedEventArgs e)
@@ -238,7 +239,7 @@ namespace TesisC
             DbTimeBlock toRet = new DbTimeBlock(DateTime.Now.Add(-length), length, globalAR, allTopicsAR); 
             db.Store(toRet);
 
-            Console.Out.WriteLine("\n\n[ BUILT TIME BLOCK, quick: "+quick+"+ ]\n");
+            Console.Out.WriteLine("\n\n[ CONSTRUIDO TIME BLOCK, quick: "+quick+"+ ]\n");
 
             return toRet;
         }
@@ -317,16 +318,17 @@ namespace TesisC
                 DbTimeBlock toAdd = new DbTimeBlock(DateTime.Now.Add(-length), length, GlobalAR, TopicAR);
                 db.Store(toAdd);
 
-                Console.Out.WriteLine("\n\n[ BUILT TIME BLOCK FROM SMALL BLOCKS, size: " + length +"+ ]\n");
+                Console.Out.WriteLine("\n\n[ CONSTRUIDO TIME BLOCK (desde otros bloques), tamaño: " + length +"+ ]\n");
+
             }   
         }
 
 
         public void PurgeDB()
         {
-            IEnumerable<DbTweet> toRemove = GetTweetsInTimeInterval(DateTime.MinValue, DateTime.Now.Add(this.TS_short), null);
+            IEnumerable<DbTweet> toRemove = GetTweetsInTimeInterval(DateTime.MinValue, DateTime.Now.Add(-this.TS_medium), null);
 
-            Console.Out.WriteLine("[ DATABASE CLEANUP START ]");
+            Console.Out.WriteLine("[ INICIO LIMPIEZA DE BD ]");
 
             Console.Out.WriteLine("[ DbTopics: " + db.Query<DbTopic>().Count + " ]");
             Console.Out.WriteLine("[ DbTweets: " + db.Query<DbTweet>().Count + " ]");
@@ -340,7 +342,7 @@ namespace TesisC
             }
 
             Console.Out.WriteLine("[ Ahora DbTweets: " + db.Query<DbTweet>().Count + " ]");
-            Console.Out.WriteLine("[ DATABASE CLEANUP END ]");
+            Console.Out.WriteLine("[ FIN LIMPIEZA DE BD ]");
         }
 
 
@@ -349,7 +351,7 @@ namespace TesisC
             cantTweets = 0;
 
             Console.Out.WriteLine("Tweets test");
-            TwitterCredentials.SetCredentials("208552577-ugHwpVaQGNlPHOq3l5W9jKdHR31NcfQX9uBHrLIg", "X6fNijMCqWwPha5jBCJeYcXIeZN42UFautsPz9jlco8S9", "34w3Tz8VE4AUGFrDsDlSsNYgv", "qtvOvqJ0VH4Y2EQlXwHaWFRUyoDhWQlLWtUpvA1OOcuVj7QIsw");
+            TwitterCredentials.SetCredentials("4460502861-Q1jsfXwbNoQAqPGqZVOF0oQFiOg4mODzgodyzK1", "VPD8QHpv4hBWVt5GHh98HxXrfql0lHzmU5BjxhWM7wkET", "2iNRWcj8m046oF8L70TF7CmI5", "ASLWbyUZboUCBrfKDDKXpA43fhLln5B9vy7TlXb4l6F6YLDkYO");
 
             myStream = Tweetinvi.Stream.CreateFilteredStream();
 
@@ -589,7 +591,7 @@ namespace TesisC
                     Console.Out.WriteLine("> O sea: " + n.Coord.Item1 +", "+n.Coord.Item2);
                 }
 
-                Console.Out.Write(n.PosValue + "/" + n.NegValue + " rt:" + n.RT+" ");
+                Console.Out.Write(n.PosValue + "/" + n.NegValue + " ");
 
 
                 // Evito topics duplicados si ya están en la base de datos.
@@ -654,6 +656,7 @@ namespace TesisC
 
         public void Dispose()
         {
+            PurgeDB(); // Que no queden tweets "sueltos" que al reabrir la aplicación con la misma db aparezcan como recientes
             db.Close();
         }
     }
